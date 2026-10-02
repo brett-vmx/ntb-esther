@@ -1,0 +1,127 @@
+{
+  "chapterNumber": 10,
+  "order": 10,
+  "labelBo": "ལེའུ་བཅུ་པ།",
+  "sectionTitleBo": "ཨ་ཧཱ་ཝེ་རོ་དང་མོར་དོ་ཀཱ་ཨི་གཉིས་ཀྱི་བྱས་རྗེས།",
+  "labelEn": "Chapter 10",
+  "sectionTitleEn": "Tribute to Xerxes and Mordecai",
+  "labelCmn": "第十章",
+  "sectionTitleCmn": "亚哈随鲁和末底改的功绩",
+  "labelHi": "अध्याय 10",
+  "sectionTitleHi": "मोर्दकै का माहात्म्य",
+  "labelNe": "अध्याय 10",
+  "sectionTitleNe": "अहासूरस र मोर्दकैका कामहरू",
+  "cover": "../../assets/chapters/covers/chapter-10.webp",
+  "verseCount": 3,
+  "audio": {
+    "adx": "/audio/adx/chapter-10.mp3",
+    "bod": "/audio/bod/chapter-10.mp3",
+    "khg": "/audio/khg/chapter-10.mp3",
+    "eng": "/audio/eng/chapter-10.mp3",
+    "cmn": null
+  },
+  "duration": {
+    "adx": "0:58",
+    "bod": "0:40",
+    "khg": "0:37",
+    "eng": "0:34",
+    "cmn": null
+  },
+  "timing": {
+    "adx": [
+      {
+        "verse": 1,
+        "time": 3.226
+      },
+      {
+        "verse": 2,
+        "time": 10.83
+      },
+      {
+        "verse": 3,
+        "time": 32.08
+      }
+    ],
+    "bod": [
+      {
+        "verse": 1,
+        "time": 2
+      },
+      {
+        "verse": 2,
+        "time": 7.1
+      },
+      {
+        "verse": 3,
+        "time": 19.7
+      }
+    ],
+    "khg": [
+      {
+        "verse": 1,
+        "time": 2.346
+      },
+      {
+        "verse": 2,
+        "time": 7.631
+      },
+      {
+        "verse": 3,
+        "time": 20.203
+      }
+    ],
+    "eng": [
+      {
+        "verse": 1,
+        "time": 3.18
+      },
+      {
+        "verse": 2,
+        "time": 9.56
+      },
+      {
+        "verse": 3,
+        "time": 21.28
+      }
+    ],
+    "cmn": null
+  },
+  "blocks": [
+    {
+      "type": "verse",
+      "number": 1,
+      "bo": [
+        "དེ་ཡང་རྒྱལ་པོ་ཨ་ཧཱ་ཝེ་རོ་ཡིས་སྐམ་ས་དང་རྒྱ་མཚོའི་གླིང་ཕྲན་རྣམས་ལ་དཔྱ་ཁྲལ་བཞག་གོ །"
+      ],
+      "paragraphStart": true,
+      "en": "Now King Xerxes imposed tribute throughout the land, even to its farthest shores.",
+      "cmn": "亚哈随鲁王使旱地和海岛的人民都进贡。",
+      "hi": "राजा क्षयर्ष ने देश और समुद्र के टापुओं पर कर लगाया।",
+      "ne": "तब राजा अहासूरसले आफ्नो साम्राज्य र समुद्री छेउका देशहरूमा कर लगाए ।"
+    },
+    {
+      "type": "verse",
+      "number": 2,
+      "bo": [
+        "ཡང་ཁོང་གིས་དབང་དང་མཐུ་སྟོབས་ལ་བརྟེན་ནས་མཛད་པ་ཐམས་ཅད་དང་། ཁོང་གིས་མོར་དོ་ཀཱ་ཨི་ཆེན་པོར་མཛད་དེ་གོ་ས་གནང་བའི་ལོ་རྒྱུས་ནི། མཱ་ཏི་དང་ཏ་ཟིག་གི་རྒྱལ་པོ་རྣམས་ཀྱི་རྒྱལ་རབས་ཀྱི་དེབ་ཐེར་ནང་དུ་བྲིས་ཡོད་པ་མ་ཡིན་ནམ།"
+      ],
+      "paragraphStart": false,
+      "en": "And all of Mordecai’s powerful and magnificent accomplishments, together with the full account of the greatness to which the king had raised him, are they not written in the Book of the Chronicles of the Kings of Media and Persia?",
+      "cmn": "他以权柄能力所行的，并他抬举末底改使他高升的事，岂不都写在米底亚和波斯王的历史上吗？",
+      "hi": "उसके माहात्म्य और पराक्रम के कामों, और मोर्दकै की उस बड़ाई का पूरा ब्योरा, जो राजा ने उसकी की थी, क्या वह मादै और फारस के राजाओं के इतिहास की पुस्तक में नहीं लिखा है?",
+      "ne": "तिनको शक्ति र ताकतका सबै प्राप्‍तिसाथै राजाले उच्‍च दर्जा दिएका मोर्दकैको महानताको पूर्ण विवरण मादी र फारसका राजाहरूका इतिहासको पुस्तकमा लेखिएका छन् ।"
+    },
+    {
+      "type": "verse",
+      "number": 3,
+      "bo": [
+        "ཡ་ཧུ་དཱ་པ་མོར་དོ་ཀཱ་ཨི་ཡི་གོང་དུ་རྒྱལ་པོ་ཨ་ཧཱ་ཝེ་རོ་ལས་མེད་དེ། ཡ་ཧུ་དཱ་པའི་ཁྲོད་དུ་ཆེན་པོ་ཡིན་པ་དང་། རང་གི་མི་རྣམས་ཀྱི་ནང་དུ་འདང་ཆེན་ཞིག་ཡིན་ལ། དེས་རང་གི་མི་རྣམས་ཀྱི་ཕན་ཁེ་སྤེལ་བར་བརྩོན་ཏེ། མི་རབས་རྗེས་མ་ཐམས་ཅད་ཀྱི་དོན་དུ་བདེ་སྐྱིད་བསྙེགས་པའོ།། །།"
+      ],
+      "paragraphStart": false,
+      "en": "For Mordecai the Jew was second only to King Xerxes, preeminent among the Jews and highly favored by his many kinsmen, seeking the good of his people and speaking peace to all his countrymen.",
+      "cmn": "犹大人末底改作亚哈随鲁王的宰相，在犹大人中为大，得他众弟兄的喜悦，为本族的人求好处，向他们说和平的话。",
+      "hi": "यहूदी मोर्दकै, क्षयर्ष राजा ही के बाद था, और यहूदियों की दृष्टि में बड़ा था, और उसके सब भाई उससे प्रसन्न थे, क्योंकि वह अपने लोगों की भलाई की खोज में रहा करता था और अपने सब लोगों से शान्ति की बातें कहा करता था।",
+      "ne": "यहूदी मोर्दकै राजा अहासूरसको दोस्रो दर्जामा थिए । तिनी यहूदीहरूका बिचमा महान् थिए, र तिनका धेरै जना यहूदी दाजुभाइका माझमा लोकप्रिय थिए, किनकि तिनले आफ्नो जातिको भलाइ गरे र आफ्ना सबै मानिसको शान्तिको पक्षमा बोले ।"
+    }
+  ]
+}

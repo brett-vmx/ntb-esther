@@ -1,0 +1,1789 @@
+# Esther — Claude Code Context
+
+## What this project is
+A mobile-first PWA for reading/listening to the Book of Esther in Tibetan
+(Amdo, Kham, and Central dialects), plus English, Chinese, Hindi and Nepali
+as text-only reading languages. This is a **sibling app of `ntb-jonah` and
+`ntb-ruth`** — same architecture, same codebase shape, different book. It
+was created in one pass (October 2026) from the assets John shared in the
+"Esther app assets" Google Drive folder, using `ntb-jonah`'s code as the base
+(it has the newest features, requests #24–34) and `ntb-ruth`'s
+`gen-chapters.mjs` as the generator base (Esther's source files have Ruth's
+shape: plain-USFM English, multiple `\s` headings per chapter, the book intro
+typed into the SFM's own front matter).
+
+Everything below the "Esther-specific differences" section is **carried over
+from ntb-jonah's CLAUDE.md** — the hard-won, book-agnostic notes (Astro's
+ClientRouter hijacking back/forward, the first-load race, the Cloudflare Range
+bug, Tibetan font and shad/justification rules, the sheet pointer-events bug,
+and so on). Where it mentions Jonah-specific content (chapter counts, image
+filenames, the five-audio-track set, Jonah's own pending requests), the
+Esther section directly below wins. If something seems surprising, check
+whether ntb-jonah's CLAUDE.md explains the same mechanism before assuming it's
+an Esther-specific choice.
+
+There's also a separate, much bigger sibling app: **New Tibetan Bible**
+(the full Bible, same translation committee), on the App Store and Google
+Play. This project cross-promotes it from a homepage section (official
+store badges in `public/badges/`) — that's a link to a *different* app, not
+a substitute for this app's own identity.
+
+Client: New Tibetan Bible (new-tibetan-bible.com). Illustrations are
+Sweet Publishing (public domain). Text is © NTB translation committee,
+CC BY-NC-ND 4.0.
+
+---
+
+## Esther-specific differences (read this first)
+
+**10 chapters, 45 inline illustrations, 3 audio tracks.** Esther is far
+bigger than Jonah (4 chapters) or Ruth (4): 10 chapters (22/23/15/17/14/14/10/
+17/32/3 verses), so the homepage grid is 5 rows of 2 cards.
+
+**Esther has four audio tracks — the three Tibetan dialects plus English —
+and no Chinese audio.** John supplied adx/bod/khg; English is the BSB reading
+from `https://www.biblestudytools.com/audio-bible/bsb/esther/` (direct mp3s at
+`content.swncdn.com/biblestudytools/audio/bsb-mp3/17_es_NNN.mp3`; 10 files,
+28.6 min, 13MB, already 44.1kHz mono 64kbps so copied as-is to
+`public/audio/eng/chapter-N.mp3`). Jonah/Ruth have all five tracks (their
+Chinese is ElevenLabs TTS); Esther's Chinese hasn't been made, and whether to
+make it is John's call. The mechanism is one list:
+`AVAILABLE_DIALECTS = ['adx','bod','khg','eng']` in `src/i18n/settings-store.ts`.
+Everything that offers or validates an audio track reads it:
+- the LISTEN-bar popover (index.astro) renders only those options (it's
+  generated from the list, not hard-coded buttons),
+- `getDialect()` ignores a stored value outside the list,
+- `setTextLang()` only snaps the audio to English/Chinese *if that track
+  exists* — so for Esther, English text snaps to the English track, while
+  switching to Chinese (no audio) leaves the current track playing, exactly
+  like Hindi/Nepali always did.
+In the generated JSON, `audio.cmn`, `duration.cmn` and `timing.cmn` are `null`
+(schema: `.nullable()`). **To add Chinese audio later:** drop the files into
+`public/audio/cmn/chapter-N.mp3` (44.1kHz/64kbps), add timing + entries in
+`gen-chapters.mjs` (`DURATIONS`, `buildChapter()`), extend `AUDIO_URLS` in
+`src/sw.js` — and add `'cmn'` to `AVAILABLE_DIALECTS`. Nothing else. Don't add a
+track to the popover without the audio actually existing.
+
+**English verse timing was generated locally** (like Jonah's eng/cmn): the
+BSB audio has no timing export, so `scripts/english-timing/transcribe.py`
+runs a local Whisper model (`mlx-community/whisper-small-mlx`, word-level
+timestamps) and `align.py` difflib-aligns each verse's BSB text against the
+transcript, writing `source-assets/timing/eng_17_EST_N.txt`. 95–99% of words
+matched in every chapter; spot-checks of 11 verse starts heard the right words
+at the right time. Only ch 9 v7-9 match poorly (Haman's ten sons' names —
+Whisper spells them differently from the BSB text; the times are right).
+Both scripts' header comments say how to re-run; then `npm run gen-chapters`.
+
+**Seek-epsilon bug (found while testing English, applies to Jonah and Ruth
+too).** After `audio.currentTime = 4.06` the element can read back 4.059999 —
+a hair *before* the verse's own start. `findVerseIndex()` used a strict
+`time <= t`, so that read as "still in the previous verse": **next-verse
+jumped to the same spot again and never advanced**, and the highlight lagged a
+verse. Whether a verse hits it depends on float rounding (so Tibetan tracks
+mostly passed casual testing). Fixed in Esther with `SEEK_EPSILON = 0.05` in
+`findVerseIndex()`; Jonah and Ruth still have the strict comparison — port the
+fix there (same one-line change) after John's review, or sooner since it's a
+pure bug fix.
+
+**Verse bridges (real data-loss bug, found and fixed).** Esther's sources
+contain verse *bridges* — one block of text covering two verse numbers:
+Tibetan `\v 11-12` (8:11-12), Chinese `\v 11-12` (8:11-12) and Chinese
+`\v 13-14` (1:13-14). The original parsers (Ruth's, from Jonah's) matched only
+`\v N text`, so the Tibetan 8:11-12 text was **silently dropped** and Chinese
+1:13 started with a stray "-14". All four parsers in `gen-chapters.mjs` now
+accept `\v N-M` and record `bridges[N] = M`. `buildChapter()` keys each block
+by the *Tibetan* verse; for every other language it joins that language's
+text over the covered range, and a language that bridges where Tibetan
+doesn't (Chinese 13-14) keeps all the text under the first number and leaves
+the second empty. Blocks whose displayed number differs get a per-language
+`labels` entry (`{"bo":"11-12","en":"11-12",...}`, schema: optional record).
+In index.astro, `verseLabel()` shows "11-12" instead of "11", `verseText()`
+skips a verse that's empty in the current language (Chinese 14), and
+`data-verse` always stays the plain first number so highlight/timing lookup is
+unchanged. Known small edge: while reading Chinese with audio playing, the
+13-14 block is only highlighted during verse 13's interval (the Tibetan audio
+timing has 13 and 14 separately). Any future book may have bridges too — if a
+verse "goes missing", check for `\v N-M` in the sources first.
+
+**Illustrations.** 45 JPGs in `source-assets/images/17_Es_CC_VV_RG.jpg`,
+named by chapter and verse like Ruth's — `INLINE_IMAGES` in gen-chapters.mjs
+places each image **after** its named verse. John trimmed these from the 53
+proposed in the four `Esther_*_Illustration_Placement_Report.docx` files (in
+the Drive folder; they were generated by Claude Cowork, and their own
+constructed filenames, `17_Est_…`, don't match the real ones — ignore them).
+The reports flagged some Low/Medium-confidence placements worth John's
+eye — the one I verified by eye is `03_01` (a black-background close-up of a
+crowned figure, placed by position rather than content; it's also 765px
+wide, not 831) — plus several close-up pairs (the king/Haman in chapter 6)
+that the report says are easy to swap, and a coverage gap at 3:5-11
+(Haman's proposal / the signet ring), which the final set confirms: no image
+between `03_04` and `03_12`. `NTB Esther_final.pdf` only embeds 28 images, so it
+cannot confirm all 45; its banquet image at 1:5 agrees with the filename.
+**Placements are unverified beyond the filenames — flag for John.** Chapter 10
+has no illustration. The Drive copy named one file `17_Es_02_17_RG 2.jpg` (a
+macOS duplicate suffix) — renamed to `17_Es_02_17_RG.jpg`; there is no other
+02_17. Images arrived already 831px wide, so they only needed webp
+conversion (Pillow, q85); no resize.
+
+**Chapter-card covers** (`src/assets/chapters/covers/chapter-N.webp`, 610px
+squares, no upscaling): my picks, not John's — chapters 1-9 use one strong
+illustration each, chapter 10 reuses the Mordecai-in-royal-purple scene
+(`08_15`) since it has none of its own. Re-crop (Pillow, square window biased
+to the subject) if John wants different ones.
+
+**Book introduction comes from the SFM**, not an RTF: `17ESTNTB.SFM`'s front
+matter (`\mt`/`\imt`/`\is1`/`\ipi`, before the first `\c`) is parsed by
+`parseIntroFromSfm()` into `src/content/intro/esther.json` — 4 sections,
+the outline being "ཨ་ཧཱ་ཝེ་རོའི་གསོལ་སྟོན་…" (1:1-2:18, 2:19-7:10, 8:1-10:3). The
+Bible introduction and the 6-page timeline are the whole-Bible content copied
+unchanged from ntb-jonah/ntb-ruth. The intro button's `data-intro-tab` is
+`esther`.
+
+**Source text files:** `17ESTNTB.SFM` (Tibetan), `EST.bsb.usfm` (English,
+BSB), `17-ESTcmn-cu89s.usfm` (Chinese, CUV), `17-ESThin2017.usfm` (Hindi),
+`17-ESTnpiulb.usfm` (Nepali, ULB). Each has several section headings per
+chapter; only the **first** is kept as the chapter's title (same rule as
+Ruth). Chapter 1's Tibetan title is therefore "Queen Vashti removed", not a
+summary of the whole chapter. `NEPALI_TITLES` is provisional (Claude's own,
+using the Nepali source's spellings: एस्तर, मोर्दकै, हामान, वश्ती, अहासूरस) —
+flag for John.
+
+**Short names / header:** Tibetan `ཨེས་སི་ཐེར།` (`\h`), Chinese `以斯帖记`,
+English `Esther`, Hindi `एस्तेर`, Nepali `एस्तर` (each source's own `\h`).
+The Chinese org-name text logo (`藏文圣经新译本`) and the +1pt gold intro
+titles, Bible | book | Timeline button order, timeline swipe and the
+settings-sheet pass-through guard (#24-34) are all in, because the base was
+Jonah. **#31 justification is still a prototype pending John's review** (see
+"Tibetan typography" below) — if his team rejects it, it comes out of
+Jonah, Ruth and Esther together.
+
+**Timing/audio:** all 40 tracks (3 dialects + English × 10 chapters) have timing, and
+every timing verse maps to a rendered block (checked: zero mismatches, zero
+non-monotonic). Audio was resampled from John's 22.05kHz originals to
+44.1kHz mono 64kbps with ffmpeg (same as Jonah) into `public/audio/{adx,bod,
+khg}/chapter-N.mp3`; the originals stay in the Drive folder (not duplicated
+in the repo). John's audio filenames differ per dialect — `adx_17_EST_N`,
+`khg_17_EST_N`, `bod_17_EST_NN` — and timing files: `adx_17_EST_N.txt`,
+`khg_17_EST_N.txt`, `bod-17-EST-NN-timing.txt`; `findTimingFile()` already
+matches all three conventions. The longest chapter is ch 9 (adx 8:30), under
+the 10-minute limit of the fixed-width time display.
+
+**Audio is cached on demand, not at install (built; Jonah/Ruth still warm
+everything at install).** Esther's audio is ~66MB across 40 files, and the
+carried-over Jonah design (fetch everything at install via
+`warmStrategyCache`) justified itself by the total being small (~13MB) — and a
+single failed fetch fails the whole SW install. So `src/sw.js` no longer warms
+anything: install precaches only the app shell (~17MB). When someone first
+**plays** a track, index.astro's `requestOfflineAudio()` (hooked to the
+`<audio>` `play` event, once per src per page session) posts
+`{ type: 'CACHE_AUDIO', url }` to the SW, which downloads that one file in full
+(no Range header — a 206 is uncacheable and useless to `RangeRequestsPlugin`)
+into the same `audio-range-cache` the audio route serves from, so seeking
+keeps working offline. Meanwhile the `<audio>` element streams from the
+network as usual (CacheFirst miss → network; the 206 isn't stored because
+`CacheableResponsePlugin` only allows `[0, 200]`), so playback never waits.
+The message handler only accepts same-origin `/audio/<dialect>/chapter-N.mp3`
+paths, dedupes in-flight downloads, skips files already cached, and swallows
+failures (the next play simply asks again). **Verified in headless Chrome
+against a production build** (the built-in browser pane can't register service
+workers — `register()` fails with "unknown error fetching the script" — so use
+a real Chrome via puppeteer-core, as done here): after install the cache holds
+zero audio; after playing English ch. 3 it holds exactly that file, byte-
+identical (1,326,037 B, status 200); with the server killed the app shell loads
+and that track plays and seeks (to 70%) from cache, while an unplayed track
+fails to load (media error 4). **User-facing consequence:** "works offline
+once installed" now means *for tracks/chapters you've played at least once*;
+an unplayed chapter offline just fails silently. A "download for offline"
+button (or a note in the UI) is a possible follow-up if John's team wants
+guaranteed offline audio — not built. Decided NOT to re-encode John's audio at
+a lower bitrate (Brett: leave his audio alone; samples at 48/40kbps were
+heard and rejected as adding choppiness to already-choppy Amdo).
+
+**About page:** `esther-about-banner.webp` (896×1077 from John's 1597×1920
+JPG, displayed `width={448} height={539}`). Copyright line says
+`new-tibetan-bible.com` (like Ruth) — Jonah's is `yohna.app`, a domain John
+bought for that app only; **Esther has no custom domain yet**.
+
+**Ports:** dev/preview is **4417** (Jonah 4415, Ruth 4416) so the three can
+run at once. localStorage keys and custom events are namespaced `esther-…`/
+`esther:…`.
+
+---
+
+## Tech stack
+- **Astro 5** with TypeScript, static output (no SSR adapter)
+- **Tailwind CSS v4** via Vite plugin
+- **Astro Content Collections** using the Astro 5 loader API (glob loader in
+  `src/content.config.ts`, NOT the legacy `src/content/config.ts`)
+- **@vite-pwa/astro** for PWA/service worker
+- **Lucide icons**
+- **Deploy: Cloudflare Pages**, connected to GitHub for auto-deploy
+
+---
+
+## Architecture decisions — do not change without discussion
+
+### Single-page app via modal
+Same pattern as C2C: chapter cards on the homepage open a modal populated
+from `window.__CHAPTERS__` (set via `define:vars`) — they do NOT navigate to
+`/chapter/[n]`. The static `/chapter/[n]` pages exist as a fallback for
+direct URL access but are not used for in-app navigation.
+
+### Content is generated, not hand-authored
+`src/content/chapters/chapter-N.json` is generated by
+`scripts/gen-chapters.mjs` from five source texts (see "Esther-specific
+differences" above for the filenames). Never hand-edit the generated JSON —
+edit the generator (or the source files) and re-run `npm run gen-chapters`.
+
+Each chapter is a `blocks` array of `{type:'verse', number, bo, en, cmn, hi,
+ne, paragraphStart, labels?}` and `{type:'image', file}` entries, in reading
+order. `bo` is an array of lines (length 1 for prose; multiple lines only for
+SFM `\q1` poetry, none in Esther); `en`/`cmn`/`hi`/`ne` are plain strings.
+`labels` appears only on verse-bridge blocks (see above).
+
+Parser notes inherited from Ruth: English is plain USFM (`parseBsbUsfm()`,
+several `\v` per line possible); Chinese has real footnotes (`\f - …\f*`,
+"-" not "+") stripped whole; Hindi's `\s1` titles are used as-is and Nepali
+has none (`NEPALI_TITLES`); none of the non-Tibetan sources has a "Chapter N"
+label, so `ENGLISH_LABELS`/`CHINESE_LABELS`/`INDIC_CHAPTER_LABELS` cover
+those.
+
+### Reading languages vs. audio tracks — related but independent settings
+**Esther note:** the `Dialect` type still lists all five values, but only the three in `AVAILABLE_DIALECTS` exist for this book — see "Esther-specific differences". The text below describes Jonah's five-track setup.
+
+Two different concepts, easy to conflate:
+- **Reading language** (`TextLang` in settings-store.ts): `'bo' | 'en' |
+  'cmn' | 'hi' | 'ne'` — which text is displayed. All five are genuinely
+  different texts (SFM/BSB/CUV/2017 Hindi/ULB Nepali), not the same text
+  relabeled. Hindi and Nepali (Brett's third addition, alongside Chinese
+  and English) are text-only — no audio track exists or is currently
+  planned to exist for them (John: no capacity to make timing files, and no
+  one to verify recordings), so they're deliberately *not* part of the
+  dialect type below at all.
+- **Dialect** (`Dialect` in settings-store.ts): `'adx' | 'bod' | 'khg' |
+  'eng' | 'cmn'` — which audio plays. Still just 5 values, unchanged by the
+  Hindi/Nepali addition. Really two different kinds of thing under one flat
+  type: the three Tibetan dialects are three recordings of the *same*
+  Tibetan text (adx/bod/khg — swapping between them never changes the
+  displayed text), while `eng`/`cmn` are full audio tracks in their own
+  languages. Kept as one flat type/setting anyway, since every place that
+  consumes it (the LISTEN-bar popover, `chapter.audio[dialect]`,
+  `chapter.timing[dialect]`) already just needs "which of N audio options"
+  with no reason to special-case where the dialect/language boundary falls.
+
+These two settings are **fully independent** — reading Chinese while
+listening to the Amdo dialect is a valid combination the app doesn't try to
+auto-sync. Changing one only fires its own event
+(`jonah:text-settings-changed` vs. `jonah:dialect-changed`) — see "Reading
+settings are global" below. `setTextLang()` in settings-store.ts couples
+bo/en/cmn to their matching dialect (see that section), but deliberately
+does nothing to the dialect when switching to/from Hindi or Nepali — since
+neither has a matching audio track, picking either one just leaves
+whatever dialect/audio was already playing untouched, so a reader can pair
+Hindi or Nepali text with any of the 5 existing audio tracks.
+
+Dialect/audio-track labels: **"Central"**, not "Lhasa" — this was tried and
+reverted per John. Bo labels for adx/bod/khg are John's second-round
+wording — ཨམ་སྐད།/དབུས་སྐད།/ཁམས་སྐད། — each with a trailing shad (།) per his
+explicit request. eng/cmn's bo labels (Claude's provisional translation of
+"English"/"Chinese" as languages, following the same "X-skad" pattern) are
+unconfirmed — flag for John. All labels live in one place —
+`DIALECT_LABELS` in `settings-store.ts` — consumed by both the LISTEN-bar
+popover (all 5 options, index.astro) and the header settings sheet's
+Tibetan-only dialect row (adx/bod/khg only, Layout.astro; see "Audio
+dialect picker" below) so neither can drift from the other. Only the
+**current reading language's** script is shown for the LISTEN-bar version,
+not both stacked — `dialectDisplay(dialect, lang)` takes a `lang` argument
+and needs refreshing on a language change, not just a dialect change (see
+`renderReadSection()` in index.astro). There's no cmn-script column in
+DIALECT_LABELS, though — reading Chinese while picking a dialect just shows
+the English name as a fallback; translating all 5 option names into three
+scripts felt like real overreach for something this secondary.
+
+### Verse-timing / read-along highlight
+**Esther note:** only adx/bod/khg have timing (eng/cmn are `null`); the paragraph below on locally-generated eng/cmn timing is Jonah history, kept for if Esther ever gets that audio.
+
+`source-assets/timing/*.txt` files are parsed by `gen-chapters.mjs` into
+`chapter.timing.{adx,bod,khg,eng,cmn}`: an array of `{verse, time}`
+verse-start timestamps, or `null` if that track's file doesn't exist yet in
+`source-assets/timing/`. All five tracks have timing now. adx/bod/khg came
+from John's forced-aligner exports; eng/cmn have no such tool, so those two
+were generated locally instead — transcribe the audio with a local Whisper
+model (word/character-level timestamps), then align the actual verse text
+against that transcription via sequence matching (Python's `difflib`) to
+find where each verse's first word/character lands in the recognized audio.
+Verified against real content, not just "it ran without error" — e.g.
+Chinese chapter 2 verse 2's whole text is just "说：", and it aligned to a
+recognized "说" at the right timestamp; every chapter's verse order came
+out strictly increasing with zero unaligned verses. That one-off pipeline
+(not part of the regular build) isn't checked into the repo; re-derive it
+similarly if new eng/cmn audio ever needs re-timing — mlx-whisper (Apple
+Silicon-native) for the transcription step, difflib for the alignment step.
+
+`findTimingFile()` in gen-chapters.mjs tries **three** filename conventions
+since John's exports haven't been consistent: `{dialect}_32_JON_{n}.txt`
+and its zero-padded form (adx, khg, and the locally-generated eng/cmn all
+use this convention), and `{dialect}-32-JON-{nn}-timing.txt` — hyphens
+throughout, zero-padded, "-timing" suffix (bod). Check a new track's actual
+filenames against all three before assuming a fourth pattern is needed.
+
+The row format has varied too, but `parseTiming()` handles both without
+changes: adx/khg are tab-separated `start\tend\t[verse]` with start===end
+(really one timestamp per line); bod's files additionally open with a
+UTF-8 BOM and four `\`-prefixed SFM-style header lines (`\id JON`, `\c 1`,
+etc.) before the data, use CRLF line endings, and have **genuinely
+different** start/end columns per line (verse N's end equals verse N+1's
+start — a real duration span, not a duplicated point). None of that needed
+new parsing logic: the header lines have no tabs so the existing
+`cols.length < 3` check already skips them, `cols[0]` (start) is what we
+want either way, and `.trim()` on the verse-number column already absorbs
+the trailing `\r` from CRLF. Only the filename-matching needed a fix.
+
+`applyVerseHighlight()` in index.astro runs on every `timeupdate` and
+lights up the `[data-verse]` block whose interval contains
+`audio.currentTime` — it's a no-op (and clears any existing highlight) if
+a dialect's timing is ever `null` again in the future (e.g. a new dialect
+added before its timing file arrives). Re-run `npm run gen-chapters` after
+dropping in new/changed timing files — don't hand-edit the `timing` field
+in the generated JSON.
+
+The same timing track also drives **prev/next verse** buttons on the LISTEN
+tile (`#modal-prev-btn`/`#modal-next-btn` in index.astro), modeled directly
+on Global Bible Tools' `AudioDialog.tsx` (they were John's named reference —
+cloned their repo to check): "previous" restarts the *current* verse if
+you're more than `PREV_THRESHOLD` (1.5s) into it, otherwise jumps back a
+verse — standard music-player feel, not a plain "go to timings[i-1]". Both
+buttons are `disabled` (not hidden) whenever the active dialect's timing is
+`null` — `updatePrevNextEnabled()`, called on open and on every dialect
+switch.
+
+### Verse-by-verse vs. paragraph layout
+The SFM's `\p`/`\m` markers are real paragraph breaks (not discarded
+anymore) — `gen-chapters.mjs` attaches `paragraphStart: boolean` to each
+verse block. Two renderers in index.astro consume the same `blocks` array:
+`blocksToHtmlVerse()` (today's one-block-per-verse, unchanged) and
+`blocksToHtmlParagraph()` (verses flow together as inline `<span data-verse>`
+elements, a new `<p>` starts at each `paragraphStart`, images still break
+out of the flow as their own block). Reused for English too — paragraph
+structure follows the underlying discourse, not the specific translation,
+so there's no separate English paragraph map. The read-along highlight
+targets `[data-verse]` regardless of mode, so it works unchanged in both —
+don't special-case highlighting per layout.
+
+Chapter 2's poetic `\q1` lines (multiple lines per verse) are only ever
+rendered as separate lines in **verse-by-verse** mode (`verseInnerHtml()`'s
+one-`<div>`-per-line branch). In **paragraph** mode they're folded into
+flowing text — `b.bo.join(' ')`, a plain space, not `<br>` — matching how
+the English (BSB) side already renders (RTF never carried per-line poetry
+breaks, so English paragraphs were always flowing text). An earlier version
+kept the `<br>` line breaks inside paragraph mode too, which looked like a
+formatting bug (hard breaks interrupting a flowing paragraph) per feedback —
+don't reintroduce per-line `<br>`s in `blocksToHtmlParagraph()`.
+
+### Reading settings are global, not per-modal (mirrors tenpa.app)
+Text language (Tibetan/English/Chinese/Hindi/Nepali), Tibetan font, text
+size, and layout (verse/paragraph) are app-wide settings, not controls
+inside each chapter modal — all four chosen from **one** header icon
+(`Settings` — see "Header icon" below — opening a single bottom sheet),
+persisted to `localStorage`, in `src/i18n/settings-store.ts`. The Language
+row is two rows in the markup, not one: bo/en/cmn (the three languages with
+an audio track) first, then hi/ne (text-only) directly below — both rows
+share the same `[data-pick-textlang]` selector and click handler, so
+adding the second row needed no script changes, just markup. Audio dialect
+briefly moved entirely out of this sheet into the LISTEN bar's own popover
+(John's request), then partially came back: Brett asked for a
+Tibetan-dialect row (adx/bod/khg only) right below the Language rows, shown
+only when Tibetan is selected — see "Audio dialect picker" below for why it
+lives in **both** places now. Same localStorage + `CustomEvent` pattern as
+tenpa's `language-store.ts`:
+- `jonah:text-settings-changed` — fired on text-lang/font/size change. The
+  open chapter modal (if any) listens and re-renders `#modal-blocks` only
+  (`renderReadSection()` in index.astro) — the `<audio>` element is left
+  completely alone so in-progress playback is never interrupted.
+- `jonah:dialect-changed` — fired on dialect change. The open modal updates
+  only the `<audio>` src + duration label (`updateAudioForDialect()`) —
+  the READ section is untouched.
+Font and text-size changes don't even need the event: they're applied as
+CSS custom properties on `:root` (`--font-tibetan-active`,
+`--reading-font-size`) by `applyTextSettings()`, and verse blocks reference
+those vars directly, so they update live with zero re-render.
+
+Text size is reading-language-dependent, not just a flat setting: Tibetan
+uses `TEXT_SIZE_REM_TIBETAN` (+2px at every step) instead of the plain
+`TEXT_SIZE_REM` every other language uses — John found Tibetan specifically
+read small at all four sizes, English/Chinese were fine, and Hindi/Nepali
+weren't flagged as needing it either when they were added later. Because of this,
+`applyTextSettings()` has to be re-called on a **language** change too, not
+just when font/size themselves change — the textLangBtns click handler in
+Layout.astro calls it explicitly, same as the font/size handlers already
+did. Don't merge these two maps back into one flat `TEXT_SIZE_REM` without
+re-checking with Brett — the two scripts are deliberately not the same
+size at a given "step" any more.
+
+The chapter label ("Chapter 1" / `ལེའུ་དང་པོ།`) is centered and matches the
+section title's font size (1.5rem) in Tibetan only — every other language
+(English/Chinese/Hindi/Nepali) keeps the original small, left-aligned
+label. `chapterLabel()`/`chapterSectionTitle()` in index.astro are small
+switch-based lookups (one per field) that replace what used to be a 3-way
+ternary repeated at 4 call sites — grown to a `switch` once Hindi/Nepali
+made it a 5-way branch, rather than nesting the ternary further. Set both in the initial
+`openChapter()` template (computed from `lang` at creation time) and again
+in `renderReadSection()` (`labelEl.style.textAlign`/`.fontSize`) for when
+the reading language changes while a chapter is already open — the initial
+template alone isn't enough, since inline styles baked in at creation time
+don't update on their own.
+
+### Header buttons need re-init after every view transition
+`Layout.astro`'s header script (share popover, both settings sheets) is
+wrapped in `document.addEventListener('astro:page-load', initHeader)` with
+an `AbortController` guard (same pattern as index.astro's `initModal()`).
+This is NOT optional boilerplate — top-level `<script>` in an Astro
+component is an ES module that only evaluates once. Opening a chapter does
+`history.pushState('/chapter/N')`; closing it calls `history.back()`, which
+Astro's `<ViewTransitions />` intercepts and swaps client-side. Without the
+`astro:page-load` re-init, the header buttons silently stop responding after
+the first such round-trip because their listeners were bound to DOM nodes
+that no longer exist post-swap. Reproduce-and-verify this specific sequence
+(open a chapter → close it → click a header icon) after touching Layout.astro.
+
+### `initModal()`/`initHeader()` also run once eagerly, not only on `astro:page-load`
+**Real bug, reported and fixed:** on a cold/first load, clicking a chapter
+card would sometimes navigate to the static `/chapter/[n]` fallback page
+(showing its own "← Back to Chapters" link) instead of opening the SPA
+modal — but only ever on the *first* click after a fresh page load; every
+click after that worked correctly. Root cause: `initModal()` (index.astro)
+and `initHeader()` (Layout.astro) were called *only* from inside their
+`astro:page-load` listener. That event fires once for the very first
+navigation too, but this page's own script is a separately-fetched module —
+on a cold load it can still be loading/parsing when `astro:page-load`
+already fires, so the listener isn't registered yet to catch that first
+dispatch, and `initModal()` never runs at all for that load. Every
+`a[data-chapter]` card is a real `<a href="/chapter/N">`, so with no
+listener intercepting it, the click just falls through to the browser's
+plain navigation, landing on the real static fallback page. The very next
+navigation back to `/` is a same-document view-transition swap (no network
+fetch involved, the module's already resident), so its `astro:page-load`
+fires and is caught normally — which is why the bug only ever showed up
+once per fresh load, not on every click.
+
+Fixed by also calling `initModal()`/`initHeader()` once, synchronously,
+right after each one is defined — not waiting on the event at all for that
+first run. This only works safely because every listener each function
+binds directly (not the ones inside per-chapter-open helpers like
+`initAudioPlayer()`, which already get fresh DOM nodes each open) uses
+`{ signal }` from that function's own `AbortController` guard — so if both
+the eager call and the `astro:page-load` listener end up firing for the
+same initial load, the second call just aborts-and-rebinds instead of
+stacking a second copy of every listener. Don't add a new listener inside
+either function without `{ signal }`, or this eager-call safety net breaks
+silently (double-firing on every subsequent real view transition, not just
+this edge case).
+
+### Astro's ClientRouter hijacks our own back/forward — intercepted deliberately
+**Real bug, reproduced and fixed, not a guess:** using the browser's own
+back/forward buttons around an open chapter modal would sometimes land on
+the *static* `/chapter/[n].astro` fallback page (native `<audio controls>`,
+"← Back to Chapters" link, "Chapter N — Jonah" title) instead of reopening
+the SPA modal — most reliably reproduced by: open a chapter, close it
+(URL back to `/`), then press the browser's **forward** button. Root
+cause: `<ViewTransitions />` (`astro:transitions`'s `ClientRouter`) listens
+for `popstate` on `window` and, whenever it doesn't recognize the
+resulting URL as "already handled," fetches and morphs in whatever page
+actually exists at that URL — treating our own `history.pushState('',
+'/chapter/N')` for the modal exactly like a real navigation to a
+different page, because it has no way to know it wasn't one. This is a
+known, unresolved upstream Astro bug, not something wrong in our own
+history-handling logic:
+[withastro/astro#13943](https://github.com/withastro/astro/issues/13943)
+("ClientRouter Triggers Full Reload on history.back() from Manually
+Pushed State") — as of writing there's no official fix or supported flag
+to opt a `pushState` call out of this.
+
+Fixed with a targeted interception, not a workaround inside index.astro's
+own popstate handler (that runs too late — Astro's router, registered
+earlier in `<head>`, already acted by the time a later `<body>` script's
+listener would run). `Layout.astro` has a tiny inline `<script>`
+**deliberately placed before `<ViewTransitions />`** that registers its
+own `popstate` listener first and calls `e.stopImmediatePropagation()`,
+so Astro's router never sees the event at all, then re-dispatches a
+`jonah:popstate` custom event so index.astro's actual modal logic (which
+has `openChapter`/`closeModal` in scope) can still react. index.astro's
+`syncModalToUrl()` listens for that custom event instead of native
+`popstate`, and handles **both** directions — closing on `/` (previously
+the only case handled) and opening/switching chapters on `/chapter/N`
+(previously unhandled, since forward-navigation into a chapter had never
+been needed before pushState-based routing was layered on). Don't move
+that early script after `<ViewTransitions />`, and don't replace it with
+a plain listener in index.astro's own script — order relative to Astro's
+own script registration is the entire mechanism this fix relies on.
+
+### Header title stays short — "Jonah", not the full bilingual name
+John asked to try `བོད་འགྱུར་གསར་མ། ཡོ་ནཱ།` (Tibetan) / "New Tibetan Bible -
+Jonah" (English) as the header title. Tested at 375px (iPhone SE/mini width)
+with the header already down to 2 icons: the Tibetan string fits, the
+English one does not — and doesn't fit even shrunk to 13px (smaller than
+the app's own 20px body text). So the header keeps the static, non-reactive
+"Jonah" title, and the fuller branding — plus a cross-promo link to the
+full New Tibetan Bible app — lives in the homepage section below the
+chapter grid instead (see "What this project is" above). Don't try to
+cram the full title back into the header without re-checking that fit —
+it's a real measured constraint, not a guess.
+
+### Sticky LISTEN bar, not sticky-inline
+The LISTEN tile is its own flex child (`#modal-listen-bar`) between the
+scrollable `#modal-content` and the panel — not part of the scrolling
+content, so it stays visible ("sticky") while the reader scrolls through
+verses. This is a *smaller* change than Global Bible Tools' own player
+(their `AudioDialog` is a dismissible floating card toggled open/closed) —
+John's brief was explicitly to keep our existing gold tile's look and just
+pin it, not rebuild it as a GBT-style floating card. The single close X
+button (top-right, always visible now, not `hidden md:flex` split from a
+separate mobile "Close" pill) is what replaced the old mobile-only
+gradient-pill dismiss affordance — simpler, one control for every
+breakpoint, plus swipe-down-to-dismiss still works on mobile.
+
+The tile's row 1 used to be "LISTEN" label (left) + dialect picker (right)
+under `justify-content:space-between` — Brett had the "LISTEN" word (in all
+three languages) removed entirely as redundant, `listenLabel()` and
+`#modal-listen-label` are gone from index.astro, don't reintroduce a label
+there without checking first. With row 1 mostly empty afterward, Brett asked to shrink the tile and turn
+the dialect picker into a right-aligned "notch" cut into the tile's own
+top-right corner — gold (`#cfb63c`, matching the tile, so it reads as one
+continuous shape rather than a separate floating chip), not the white
+centered pill tried first. `#modal-dialect-btn`'s wrapper is
+`position:absolute;right:0;bottom:100%` — flush against the tile's own
+right edge and sitting exactly on its top edge, no translate/negative-
+margin tricks needed. `border-radius:14px 14px 0 0` on the button (both
+top corners rounded, matching the tile's own 14px radius; bottom corners
+square) is what makes it read as a notch rather than a floating tab — the
+top-right corner's curve continues the tile's own corner curve below it,
+while the top-left corner is the new curve that makes it look "cut in."
+Costs no flow height inside the tile (absolute positioning), so removing
+row 1 entirely is what actually shrinks the player. The tile's own top
+margin is unchanged (`0`, not bumped) — Brett was explicit that the area
+directly above the *rest* of the tile (i.e. not behind the notch itself)
+should stay transparent, so reading content keeps flowing/scrolling all
+the way up to the tile everywhere except the notch's own small footprint,
+which does cover whatever's directly behind it (an expected, ordinary
+consequence of a floating tab, not something to design around). The
+popover still opens **upward** (`bottom:100%`) for the same off-screen
+reason as before, right-aligned under the notch (`right:0`, no
+transform) — matching the notch's own alignment, not centered.
+
+### Audio player size reduction (John/Scott: "looks a bit big")
+John liked the player overall but flagged it as feeling slightly large;
+Scott separately made the same observation. He suggested two options: (1)
+bring the dialect notch down until the Tibetan text's descenders align
+with the tile's own top border, or (2) more drastically, narrow the seek
+track and drop the notch height-wise into the tile itself, freeing up
+enough space that the notch might not need to "stick up" at all. **Brett
+explicitly rejected option 2** across both rounds of this — he didn't
+want the notch absorbed into the tile or the seek track narrowed — and
+countered with padding-only compromises instead, refined over two rounds
+(the first round accidentally described as "the audio player's" padding
+when Brett actually meant the dialect picker's — corrected in the second
+round, tile padding from round 1 was kept as-is once caught):
+
+**Round 1** — tile padding, and the notch's own bottom padding zeroed:
+- The tile's own **top/left/right** padding (bottom deliberately left
+  alone) reduced by 2px each: `padding:calc(1.1rem - 2px) calc(1.1rem -
+  2px) 1.1rem calc(1.1rem - 2px)` instead of a flat `1.1rem`. Bottom stays
+  at the original `1.1rem` so row 2's controls (time/chevrons/loop/speed)
+  keep the same comfortable clearance from the tile's bottom edge.
+- The dialect notch's own **bottom** padding (top padding untouched at
+  the time) dropped from `.5rem` to `0`, so its text sat right at the
+  notch's own bottom edge.
+
+**Round 2** — Brett caught that he'd meant the *dialect picker's* padding
+in his first message, not the tile's (the tile's own -2px change was kept
+anyway, since it still looked fine) — plus a further, more precise ask:
+line up the notch text's *vertical midpoint* with the tile's own top
+border, not just tuck the text up against it.
+- The notch's own **top/left/right** padding (bottom already 0 from round
+  1) each reduced by a further 4px: `padding:calc(.5rem - 4px) calc(1.1rem
+  - 4px) 0` on `#modal-dialect-btn`.
+- `#modal-dialect-notch-wrap`'s `bottom` changed from a flush `100%` to
+  `calc(100% - 10.72px)` — the wrapper now overlaps 10.72px down into the
+  tile, rather than sitting exactly on top of it. 10.72px is half the
+  dialect label's own line-box height, measured directly in the browser
+  (not calculated by hand from font metrics) — and confirmed identical
+  across all 3 Tibetan font choices (OuChan2/ChoukMatik/Dutsa2), since
+  the line-box the browser lays out for a given font-size doesn't change
+  with which of the 3 fonts actually renders inside it, only the glyphs'
+  own ink do. That's what makes one fixed offset safe regardless of which
+  font the reader has picked. Verified there's still ~10px of clear
+  vertical space between the notch and the play-position button even when
+  that button is all the way at the right end of the seek track (100%
+  playback, same horizontal position as the right-aligned notch) — the
+  two never visually collide, checked specifically with the cursive
+  Dutsa2 font, which is the one Brett flagged double-checking himself
+  given its lower-hanging descenders.
+
+Don't go further than this (e.g. removing the notch, narrowing the seek
+track, or shaving more off the tile's or notch's padding) without
+checking first — Brett was explicit that once the layout starts feeling
+"crammed" the app loses the sense of "beauty" whitespace gives it, and
+both rounds were deliberately small, padding-only adjustments, not the
+start of a broader shrink.
+
+### Play/pause is the position circle, not a separate 72px button
+Per feedback, there's no dedicated big play/pause button anymore — the
+small circle that marks the current position on the seek track
+(`#modal-play-btn`, absolutely positioned at `left: {progress}%` on top of
+`#modal-progress-track`) *is* the play/pause control, holding both the
+play and pause SVGs (toggled via display none/'') and swapping icon on
+tap. The track itself is a plain div (not a native `<input type=range>`
+any more), driven entirely by pointer events: `pointerdown`/`pointermove`
+on the track compute a seek position from `clientX` vs. the track's
+`getBoundingClientRect()`, `pointerup` re-applies the verse highlight.
+
+The circle itself needs its own pointerdown/pointermove/pointerup handling
+(not just a `click` listener) — it visually reads as a draggable scrubber
+thumb, and people tried to grab it and drag it left/right, which a plain
+click handler can't do anything with (this was a real reported bug: "I
+can't move the play button back and forth"). `buttonDragging`/
+`buttonDragMoved`/`buttonDragStartX` in index.astro distinguish a tap
+(toggle play/pause) from a drag (seek) by movement distance
+(`DRAG_MOVE_THRESHOLD = 6px`) between the circle's own pointerdown and
+pointerup — `playBtn.setPointerCapture()` keeps the drag tracking correctly
+even once the finger moves off the small circle and onto the rest of the
+track. Don't go back to a plain `click` listener on the circle — it works
+fine for mouse users clicking without moving, which is exactly why this
+bug wasn't obvious in casual testing, but breaks the drag gesture real
+touch users reach for first.
+
+The track's own `pointerdown` handler (below) explicitly skips when the
+event target is inside the circle (`playBtn.contains(e.target)`), so the
+circle's own handlers above are the only thing driving a drag that starts
+on the circle; the track's handlers take over for drags/taps that start
+elsewhere on the track. Prev/next are
+plain chevrons (stroke SVG, no background/circle) and the speed button has
+no background either — both were pill/circle-shaped before this round.
+Chevron `stroke-width` is `3.5`, not the thinner `2.5` first used — at 20px
+with a thin stroke they read as a lighter gray next to the bold black play
+button and text even though the color value (`#1c1710`, ink) already
+matched exactly; it's a stroke-weight/legibility issue, not a color one.
+Row 3 (time / chevrons / loop+speed) uses `justify-content: space-between`
+with exactly three children so the chevron pair sits visually centered
+between the time indicator and the loop+speed group, per feedback, without
+needing absolute positioning. The speed button has a **fixed** `width`
+(2.75rem) instead of sizing to its own text — its label changes length
+across the nine speed values ("1×" vs. "0.5×"/"1.3×"), and under
+`space-between` a changing flanking-item width shifts the middle item's
+(the chevrons') computed gap, so without a fixed width the chevrons
+visibly jumped position every time the speed changed.
+
+**Real bug, reported and fixed:** `#modal-time-display` (the *other*
+flanking child, on row 2's opposite side) needed the same treatment —
+John noticed the chevrons drifting left/right as playback progressed, even
+though every duration in this app is under 10 minutes, so the string's
+*character count* never actually changes ("M:SS / M:SS" always). The
+culprit was pixel width, not character count: the default sans font isn't
+using tabular figures, so "1" and "8" don't render the same width, and
+`audio.currentTime` ticking through its digits every second was enough to
+visibly nudge the chevrons under `space-between`. Fixed the same way as
+the speed button — `#modal-time-display` now has a fixed `width:5.5rem`
+— plus `font-variant-numeric:tabular-nums` so the digits themselves stop
+fluctuating too (belt-and-suspenders, since a fixed-width container alone
+already stops the chevrons moving). Widen this if a future chapter/dialect
+ever runs 10+ minutes (a 5th "M" digit would need the extra room).
+
+### Loop control (John's request #10, modeled on Global Bible Tools)
+`#modal-loop-btn` sits immediately left of the speed button — both wrapped
+in one flex group so they still act as row 3's single third child under
+`space-between` (see above), which is why adding a 4th control didn't
+require reworking that layout. Cycles off → repeat verse → repeat chapter
+→ off on tap (`setLoopMode()` in `initAudioPlayer()`), shown as one icon
+button with two SVGs swapped like the play/pause icon (`Repeat`/`Repeat1`
+inline paths, since index.astro's audio-player script builds plain HTML
+strings and can't use the Astro `@lucide/astro` components Layout.astro
+uses) — "off" and "repeat chapter" both use the plain `Repeat` icon,
+distinguished only by opacity (`.35` vs `1`, same convention as disabled
+prev/next buttons), and "repeat verse" swaps to `Repeat1` at full opacity.
+Not persisted across chapters/sessions like playback speed — it resets to
+"off" on every chapter open, since looping is a momentary listening choice
+rather than a lasting preference.
+- **Repeat chapter**: the simple case — the existing `audio.addEventListener('ended', ...)`
+  handler restarts (`currentTime = 0; audio.play()`) instead of resetting
+  to a paused/stopped state, when `loopMode === 'chapter'`.
+- **Repeat verse**: needs a per-tick check since there's no separate "verse
+  end" event — `loopVerseIdx` locks to whichever verse was active when loop
+  mode turned on (via `findVerseIndex`), and the `timeupdate` handler jumps
+  back to that verse's start time the moment playback advances into the
+  *next* verse (`idx > loopVerseIdx`). The prev/next-verse buttons re-lock
+  `loopVerseIdx` to whatever verse they land on, so manually skipping verses
+  while "repeat verse" is active starts looping the new verse instead of
+  fighting to snap back to the old one. Only meaningful with timing data —
+  with `timings` null, `loopVerseIdx` stays `null` and the loop is a silent
+  no-op (same "no timing = no-op" pattern as `applyVerseHighlight()`), not
+  worth a separate disabled state given every dialect currently has timing.
+
+The row 2 wrapper around the seek track is inset `padding: 19px 17px`
+(vertical 19px = the 14px needed to clear the 34px circle's overhang past
+the 6px track, plus 5px more breathing room per feedback; horizontal 17px
+= half the circle's width) — the horizontal inset means the track's own
+0%/100% extremes put the *circle's edge*, not its center, flush with the
+tile's left content edge and the dialect/speed controls' right edge,
+matching row 1 and row 3's content width exactly. Don't make the track
+`width: 100%` of the full tile again — it needs this narrower, inset track
+to keep the button from overhanging the tile's edges.
+
+Row 1 used to also carry a "LISTEN" label (left-aligned, translated per
+language) opposite the dialect picker — removed per Brett's request as
+redundant in all three languages; see "Sticky LISTEN bar" above for the
+current row 1 layout (dialect picker only, right-aligned).
+
+### Header safe-area padding needs a real minimum, not just env()
+The header's top padding is `max(1.5rem, env(safe-area-inset-top))`, not
+plain `env(safe-area-inset-top)`. On notched/Dynamic-Island iPhones the env()
+value alone (44–59px) is plenty, but on non-notched devices (iPhone SE, etc.)
+`env(safe-area-inset-top)` resolves to **0** even though `viewport-fit=cover`
+still draws our content full-bleed under the status bar in Safari and in
+installed-PWA standalone mode — Safari is what actually honors
+`viewport-fit=cover`; Chrome/Firefox for iOS don't extend content under the
+status bar the same way, which is why the header only looked cramped in
+Safari and standalone, not other mobile browsers. Don't drop the fixed
+1.5rem minimum thinking env() alone is "more correct" — test on a
+non-notched device (or just trust this note) before changing it.
+
+### The chapter modal must never grow taller than "100dvh minus the header"
+The header sits at `z-[210]`, deliberately *above* the chapter modal's
+z-index, so its own gear/share buttons stay reachable while a chapter is
+open. That means whenever the modal's bottom sheet grows tall enough for
+its own top (chapter number, title, close button) to reach the header's
+row, that content renders **behind** the opaque header — not just visually
+crowded, genuinely invisible and unclickable, including the close button.
+This isn't a viewport-units bug (`dvh` vs `vh`) — it reproduces identically
+either way — it's a stacking-order + sizing interaction: the header wins
+the z-index fight, so the modal must simply be kept short enough to never
+reach it. `Layout.astro`'s `initHeader()` measures the header's real
+rendered height (it varies a lot by device via `env(safe-area-inset-top)`)
+and exposes it as `--header-h` on `:root`, updated on resize. The modal
+panel's mobile max-height is `calc(100dvh - var(--header-h,90px) - 8px)`
+(index.astro) instead of a flat `92dvh` — don't go back to a flat
+percentage; it's exactly what let the header hide the close button. Verify
+by opening a chapter and confirming the label/title/close button are
+visible immediately, with no scrolling — CAUGHT via real device testing
+(iOS Simulator, Safari), not reproducible in a desktop-sized browser
+viewport where the modal's height never gets close to the header at all.
+
+### PWA service worker injection
+`@vite-pwa/astro` does NOT automatically inject the manifest link or SW
+registration script into Astro 5 HTML output. Both are manually added to
+`src/layouts/Layout.astro`:
+- `<link rel="manifest" href="/manifest.webmanifest" />`
+- `<script src="/registerSW.js" is:inline></script>`
+Do not remove these — this is intentional (same as C2C).
+
+The service worker is a **hand-written source file**, `src/sw.js`, built
+via VitePWA's `strategies: 'injectManifest'` (astro.config.mjs) — not the
+declarative `generateSW` most `@vite-pwa/astro` examples show. This was a
+deliberate switch (see "Cloudflare Pages doesn't support Range requests"
+above) needed specifically so audio could be excluded from the automatic
+precache and routed through its own Range-aware strategy instead.
+`self.__WB_MANIFEST` in `src/sw.js` is a build-time placeholder — the
+actual file list is injected by the `injectManifest` build step, same as
+`self.__WB_MANIFEST` would be in any Workbox `injectManifest` setup; don't
+hand-edit it.
+
+### Workbox audio caching — on demand (Esther) — see the Esther section above
+This section was ntb-jonah's: all of its audio is warmed into
+`audio-range-cache` at install via `warmStrategyCache()` (deliberately not the
+standard precache — `mp3` is excluded from `injectManifest.globPatterns` in
+astro.config.mjs; see "Cloudflare Pages doesn't support Range requests" below
+for why). **Esther replaced the install-time warm-up with on-demand caching**
+("Audio is cached on demand" in the Esther section). Everything below about
+why audio must stay out of the precache and go only through the
+CacheFirst+RangeRequestsPlugin route still applies unchanged.
+
+### Cloudflare Pages doesn't support Range requests — custom SW papers over it
+**Real bug, found via testing, not a guess — and fixed twice, because the
+first fix looked right but wasn't:** the prev/next-verse buttons, verse
+highlighting, and the LISTEN seek track all stopped working — silently
+snapping back to 0 instead of jumping to the requested position —
+reproducibly in every browser. Root cause: Cloudflare Pages' static asset
+serving ignores the `Range` header entirely and always returns a plain
+`200` with the full file body, never a `206 Partial Content` /
+`Accept-Ranges: bytes` (confirmed with `curl -H "Range: bytes=..."` directly
+against `https://ntb-jonah.pages.dev`, compared against `astro preview`'s
+local server, which *does* support Range correctly — that gap is what made
+this only reproduce on the deployed site, not in local dev). Without Range
+support, `HTMLMediaElement.seekable` correctly reports `[0, 0]` — the
+browser has no way to know it can fetch an arbitrary future byte range — so
+any seek ahead of what's already been sequentially downloaded is rejected
+and reverts. This is a platform limitation of Cloudflare Pages, not fixable
+via a `_headers` file (Range support is a serving-layer capability, not a
+response header you can just declare). All three symptoms are downstream of
+this one thing, not three separate bugs — normal straight-through playback
+never needed arbitrary seeking, so it worked the whole time.
+
+**The first attempt at fixing this didn't actually work**, and the reason
+why is the important part: it added a `runtimeCaching` rule
+(`handler: 'CacheFirst'`, `options.rangeRequests: true`) alongside the
+default full-audio precache (`globPatterns` included `mp3`). That looked
+reasonable — Workbox's own docs even suggest this shape — but
+`precacheAndRoute()` registers its own route for every precached URL, and
+that route is checked *before* any separately-registered `runtimeCaching`
+route and serves the plain, fully-cached file with no Range awareness at
+all, for every request, Range header or not. The competing `runtimeCaching`
+route was dead code the whole time. This wasn't caught immediately because
+testing right after deploying it happened to look like it worked — don't
+trust a one-off manual test here; verify by explicitly waiting for the
+service worker's install/precache to *fully* finish before testing a seek,
+in a freshly cleared origin (unregister the SW, delete all caches, reload
+twice), or a race condition can make a broken fix look fine.
+
+The actual fix (`src/sw.js`, `astro.config.mjs`): switched from
+`generateSW` to Workbox's **`injectManifest`** strategy with a hand-written
+service worker, following Workbox's official "Serving cached audio and
+video" recipe exactly. Audio is now excluded from the automatic precache
+(`injectManifest.globPatterns` in astro.config.mjs has no `mp3`) and is the
+only thing a dedicated `CacheFirst` route (`request.destination === 'audio'`
+— not a URL pattern, matching the recipe) handles, with
+`RangeRequestsPlugin` + `CacheableResponsePlugin` in its own
+`audio-range-cache` — there is no second route for these URLs to conflict
+with. `workbox-recipes`' `warmStrategyCache()` pre-fetches all 12 dialect
+files into that same cache at install time (via that same strategy object),
+preserving the original "full offline audio immediately after install"
+behavior without going through the plain precache at all. The `<audio>`
+element also needs `crossorigin="anonymous"` (index.astro) — Workbox's own
+recipe calls this out as required even for same-origin media.
+
+Don't put `mp3` back in `injectManifest.globPatterns` "to be safe" — that
+recreates the exact competing-route bug above. Don't revert to `generateSW`
+for this reason either. Verified end-to-end after this fix, with the
+service worker's install fully settled before testing: `audio.seekable`
+reports the full `[0, duration]` range, prev/next-verse buttons work, verse
+highlighting follows a next/prev jump correctly, and dragging the seek
+track lands exactly on the requested position.
+
+### No framework islands
+Vanilla JS only. Do not add Preact, React, Vue, or any other framework.
+
+---
+
+## Design tokens
+| Token | Value | Usage |
+|-------|-------|-------|
+| Gold | `#CFB63C` | Header/nav bg, LISTEN tile bg, solid badge fills |
+| Gold deep | `#A38A1E` | Small accent text/links on white (plain gold fails contrast there — see below) |
+| Cream | `#ECE1B1` | Soft pill backgrounds — pair with dark ink text, not gold text |
+| Ink | `#1C1710` | Body text, dark UI elements (play button, header text) |
+| Page bg | `#F7F5EF` | Warm off-white |
+| Body font | 20px base | Tailwind default overridden |
+| Tibetan font | `Monlam Uni OuChan2` | See font notes below |
+| Card radius | 10px | `rounded-card` |
+
+**Contrast constraint, verified with WCAG relative-luminance math:** plain
+gold (`#CFB63C`) text/icons on white measure ~2:1 — fails even the 3:1 UI
+floor. Gold only works as a *fill* (with dark ink content on top, ~8:1) or as
+`gold-deep` for large/bold accent text. Never place plain gold text on a
+light background.
+
+## Fonts
+`public/fonts/`: `MonlamUniOuChan2.ttf` (default — block/u-chen script),
+`MonlamUniChoukMatik.ttf` and `MonlamUniDutsa2.ttf` (both u-med/"headless"
+cursive calligraphy styles, offered as alternates — visually a different
+script style, not just a weight/spacing variant of OuChan2). This is
+John's second, replacement font request — the original set (OuChan5 as
+default, OuChan2 and SambhotaDege as alternates) is gone; those two files
+were deleted from `public/fonts/` so they don't get precached for nothing.
+All three current fonts are self-hosted via `@font-face` in
+`src/styles/global.css` — none of these are on Google Fonts.
+
+`NotoSansSC-Regular.woff2`/`NotoSansSC-Bold.woff2` — the Chinese reading
+face, added with Chinese-language support. Deliberately self-hosted rather
+than linked from Google Fonts, same as the Tibetan fonts, but for a
+different reason: `fonts.googleapis.com`/`fonts.gstatic.com` are blocked by
+mainland China's Great Firewall, which would break Chinese rendering for a
+meaningful share of this app's actual audience — self-hosting isn't
+optional polish here. Only one weight pair, no alternates (unlike Tibetan's
+three fonts) — Chinese didn't get a font-choice row in settings.
+
+Subsetted with `fonttools` down to the ~546 characters (hanzi + CJK
+punctuation + ASCII) actually used across **both** the CUV source text and
+the Chinese About-page copy (see "About page" below) — full Noto Sans SC is
+15-20MB; these subsets are under 92KB each. Both text sources have to be
+re-scanned together for the character set — the About page's vocabulary
+("版权所有", "应用程序", "分享", etc.) barely overlaps with Jonah's
+narrative vocabulary, so subsetting from the USFM alone silently dropped 24
+glyphs the About page needed; caught by testing the About page in Chinese
+after adding it, not by the build (a missing glyph fails soft — the
+browser falls back to its system CJK font per-character — so it doesn't
+error, just looks visually inconsistent with the rest of the self-hosted
+font). The subsetting pipeline (fetch the variable font from the
+google/fonts GitHub repo, instantiate wght=400/700 static instances,
+`pyftsubset` each to the combined character set from `33-JONcmn-cu89s.usfm`
+plus the About page's own Chinese strings) isn't checked into the repo —
+re-derive it from **both** sources if either one changes enough to need
+new characters. Don't link Google Fonts directly for this or any future
+non-Latin script — same firewall problem.
+
+## Asset locations
+```
+src/assets/chapters/covers/   Homepage chapter-card images (webp, square-cropped)
+src/assets/chapters/inline/   In-reading illustrations (webp, 831px wide —
+                               ~2x the phone display width). Esther's 45
+                               17_Es_CC_VV_RG images arrived already 831px
+                               wide and were just converted JPG -> webp q85
+                               with Pillow (source-assets/images/ keeps the JPGs).
+src/assets/timeline/          Creation-to-Christ timeline pages (John's request #21),
+                               page-{1-6}.webp — resized from the client's originals
+                               (1823x2556) down to 960px wide (~2x a phone's display
+                               width, same "retina without carrying the full-size
+                               original" reasoning as the About banner) and converted
+                               to webp with Pillow, quality 85. Source PNGs, renamed
+                               from the client's own long filenames, live in
+                               source-assets/timeline/page-{1-6}.png — pixel-identical
+                               to the originals, just renamed (verified with
+                               ImageChops.difference before deleting the originals).
+                               Re-derive the same way if the timeline is ever revised.
+src/assets/branding/          Logo variants — ntb-navbar-wordmark-gold.png (current
+                               header logo, John's second-round Tibetan-wordmark-on-
+                               gold-pill design) and jonah-about-banner.webp (About
+                               page cover art, see "About page" above) plus older
+                               circle/inverse/full/mark-white variants kept for
+                               reference (ntb-logo-mark-white.png was the header
+                               logo before this round).
+public/audio/{adx,bod,khg}/   Dialect audio, chapter-N.mp3 — resampled to 44100Hz
+                               from John's original 22050Hz files in source-assets/
+                               (ffmpeg -ar 44100 -b:a 64k, same durations, same
+                               ~size). This was investigated as a possible cause of
+                               the seek bug below but wasn't the actual fix — kept
+                               anyway since 44100Hz is the standard rate and there's
+                               no downside; don't reintroduce 22050Hz files.
+public/audio/eng/              English (BSB) audio, chapter-N.mp3 — Brett found this
+                               online; already 44100Hz/64kbps, copied in as-is, no
+                               re-encode needed.
+public/audio/cmn/              Chinese (CUV) audio, chapter-N.mp3 — Brett generated
+                               this from ElevenLabs; re-encoded from the source's
+                               128kbps down to 64kbps to match the rest.
+public/fonts/                 Tibetan Unicode fonts + NotoSansSC-{Regular,Bold}.woff2
+                               (Chinese) — see "Fonts" above.
+public/icons/                 PWA icon PNGs (icon-192, icon-512, apple-touch-icon) —
+                               John's "share icon" (a rounded-square gold tile with
+                               the Tibetan "Jonah" wordmark, request #15 in his
+                               second quick-edits round), copied directly from
+                               source-assets/images/ntb-share-icon-jonah-
+                               {180,192,512}.png (replacing the earlier "black
+                               embossed" New-Tibetan-Bible-wordmark icon — that one
+                               named the org, this one names this specific app).
+public/favicon.ico             Multi-size (16/32/48) .ico generated from the same
+                               share-icon 512px source with Pillow — browsers want
+                               an .ico for the tab/bookmark favicon, not a bare PNG.
+                               Regenerate from source-assets/images/
+                               ntb-share-icon-jonah-512.png if the icon changes again.
+public/badges/                Official Apple/Google store badges (app-store-badge.svg,
+                               google-play-badge.png) — do not reskin, Apple/Google both
+                               require using their own badge artwork as-is. Google's PNG
+                               bakes in ~16% transparent margin on every side (Apple's SVG
+                               doesn't), so it's displayed taller (62.5px vs. Apple's 42px)
+                               to make the two visible logos read as the same size —
+                               re-check this ratio if the badge files are ever replaced.
+source-assets/                Original client files — see README.md
+```
+
+## App shell
+Narrow fixed-width column (`max-w-[448px] mx-auto`) wraps the header AND
+main content — same treatment as tenpa.app, so the 2-col chapter grid stays
+2 columns even on a wide desktop viewport instead of reflowing to 4. The
+chapter modal is capped at the same 448px on desktop for visual consistency.
+
+**Header** (`Layout.astro`): logo on the left is now John's second-round
+navbar wordmark — `ntb-navbar-wordmark-gold.png` (a self-contained gold
+pill with embossed black Tibetan text, "New Tibetan Bible"), copied from
+`source-assets/images/3-preferred-logos/ntb-navbar-logo-embossed-noborder-
+512h.png` — replacing the earlier `ntb-logo-mark-white.png` transparent
+icon mark. It's already a complete graphic with its own background/shape,
+so there's no CSS `rounded-full`/border treatment on top of it any more
+(that was specifically for the old transparent mark). Displayed at a fixed
+`h-8` (32px) with width auto-scaling from the source's own ~3.3:1 aspect
+ratio — verified this still fits at 375px next to "Jonah" and all three
+right-side icons with room to spare (same discipline as "Header title
+stays short" below; re-verify if the wordmark asset changes again). Right
+side has **three** icons: settings (`Settings` gear — see "Header icon"
+below for why), About (`Info`), `Share2`
+(popover: Copy link / native Share) — About was inserted between the other
+two per John's request. Share used to be on the left with the logo
+centered next to the title — moved to the right icon cluster so the logo
+could stand alone on the left. Structure and behavior mirror tenpa.app's
+share popover and settings bottom sheet, recolored to Jonah's gold/ink
+palette instead of tenpa's dark theme.
+
+### Header title and logo react to reading language
+Per Brett: the title should say "Jonah" in each reading language's own
+script/word — `ཡོ་ནཱ།` (Tibetan), "约拿书" (Chinese), "Jonah" (English),
+"योना" (Hindi and Nepali both — each source USFM's own `\toc2` short name
+for the book, same Devanagari word in both languages) — and the
+wordmark-image logo should become plain "New Tibetan Bible" text whenever
+the reading language isn't Tibetan (the Tibetan-script image doesn't read
+as English/Chinese/Hindi/Nepali). `updateHeaderTitle()` in Layout.astro's
+script looks both up from one `HEADER_TITLES` map, keyed by `TextLang`, and
+updates them together on `jonah:text-settings-changed` and on init —
+setting `#header-title`'s text and `.tibetan`/`.chinese` class, and
+toggling which of `#header-logo-img`/`#header-logo-text` is hidden. The
+text logo reads from an `ORG_NAME_LOGO` map: Chinese shows John's confirmed
+name **藏文圣经新译本** (request #33, in the `.chinese` font — all 7
+characters were already in the subsetted Noto Sans SC, so no re-subsetting),
+and the same name replaced the provisional `《新藏文圣经》` in the Chinese
+About page's cross-promo line. There's still no confirmed Hindi/Nepali
+org-name translation, so those fall back to the English text logo — don't
+add a guessed one without confirming with John/Brett first. **Only active on pages using the default title** — guarded by
+`data-reactive-title` on `#header-title`, set server-side from `title ===
+'Jonah'` — so the static `/chapter/[n]` fallback page (which passes its own
+`Chapter N — Jonah` title) is untouched regardless of reading language;
+that page was never part of the language-toggle system. The English text
+logo needed real tuning to fit: at the header's normal title size it
+overlapped the centered "Jonah" title (confirmed by measuring — ~170px
+wide against a ~130px budget before the title's left edge), so
+`#header-logo-text` is deliberately small (`text-xs`, tight letter-spacing)
+— don't bump it back up to a normal logo/title size without re-measuring,
+same "Header title stays short" discipline as below.
+
+### Header icon: `Settings` gear, not `Type` — reverted once
+The reading-settings button has been all three of a `Settings` gear, a
+literal bold "T", and Lucide's `Type` icon at different points this
+project. It started as a gear when the sheet held both reading AND audio
+settings; became "T" then `Type` once dialect briefly moved entirely out to
+the LISTEN bar and the sheet was text-only; then went **back** to the gear
+once Chinese/English support brought a conditional Tibetan-dialect row back
+into this same sheet (see "Audio dialect picker" below) — audio settings
+live here again, so the gear fits again. If dialect ever fully leaves this
+sheet again, `Type` (Brett's preferred pick from Jonah's older two-icon
+header) is the icon to reach for, not a literal letter.
+
+### Audio dialect picker: LISTEN bar (5 options) AND settings sheet (3, Tibetan-only)
+Two locations, two different jobs, both live now:
+- **LISTEN bar** (`#modal-dialect-btn`/`#modal-dialect-popover` in
+  index.astro) — a popover anchored on the dialect name in row 1, all
+  **5** options (Amdo/Central/Kham/English/Chinese), for switching audio
+  track while actually listening without leaving the chapter modal.
+- **Header settings sheet** (`#dialect-row-wrap` in Layout.astro) — just
+  the **3** Tibetan dialects, shown only when the Language row has Tibetan
+  selected (`lang === 'bo'`, same visibility gate as the Tibetan-font row
+  right below it) — Brett's request, for narrowing among Amdo/Central/Kham
+  as a reading preference, not a general "pick any of 5 audio tracks"
+  control. Don't add eng/cmn buttons to this row — that's what the
+  LISTEN-bar popover is for.
+Both call the same `setDialect()`, so a change from either place updates
+the other correctly via the existing `jonah:dialect-changed` event — no
+special sync code needed between them. Implementation notes for the
+LISTEN-bar popover specifically:
+- `populateDialectPopover(lang)` fills in the five options' text (via the
+  same `dialectDisplay()`/`DIALECT_LABELS` used elsewhere) and highlights
+  the active one; called on chapter open (`initDialectPopover()`), on a
+  language change (`renderReadSection()`), and on a dialect change
+  (`updateAudioForDialect()`) — three different reasons the popover's
+  displayed text or highlight could go stale.
+- The popover's own toggle-button click and option-click listeners are
+  bound in `initDialectPopover()`, called fresh every `openChapter()` (same
+  reasoning as `initAudioPlayer()` — the LISTEN bar's DOM is fully
+  regenerated on every chapter open/switch).
+- The outside-click-to-close listener is the one exception: it's bound
+  **once**, outside `initDialectPopover()`, directly in `initModal()`'s
+  outer scope, and looks up the current popover/button by `getElementById`
+  inside the handler rather than closing over references. Binding it
+  per-chapter-open instead (like the pattern above) would stack a fresh
+  `document` click listener on every chapter switch that's never cleaned
+  up until the next full page load — harmless at this app's 4-chapter
+  scale, but the wrong pattern to copy elsewhere.
+- The popover opens **upward** (`bottom:100%`, not `top:100%`) — it's
+  anchored near the top of the LISTEN bar, which itself sits near the
+  bottom of the modal/viewport, so opening downward pushed the third
+  option (Kham) off-screen. Don't flip this back to `top:100%` without
+  re-checking that all three options stay fully visible on a real phone
+  viewport, not just a tall desktop one.
+
+The header row has **no fixed height** — it used to be `h-[56px]`, which
+(under Tailwind's border-box preflight) meant a large safe-area
+`padding-top` shrank the row's own content box smaller than the 40px logo,
+so the logo spilled out past the header's bottom edge. The row now sizes
+itself from `padding-top: max(1.25rem, env(safe-area-inset-top))` +
+content + a fixed `padding-bottom: 0.875rem`, so it simply grows taller on
+deep-notch devices instead of clipping. Verified in real mobile Safari
+(iOS Simulator, notched iPhone) and at a 375px Chromium mobile viewport
+(stands in for Chrome/Firefox on iOS, where `env(safe-area-inset-top)`
+is always 0) — both render the header with room to spare.
+
+The settings sheet's dim backdrop is `pointer-events:none` — only the sheet
+panel itself is interactive — so the page underneath (chapter text or the
+homepage) stays scrollable while the sheet is open, rather than being
+blocked by a full-viewport backdrop. Closing on an outside tap is handled by
+a `document`-level click listener (checking the click target isn't inside
+the sheet panel or the settings button), the same pattern as the share
+popover's outside-click close, not a backdrop click handler.
+
+**Real bug, reported by a user, reproduced and fixed (request #34):** "if I
+change a setting while I'm in a chapter, it bombs back to the main menu."
+It wasn't the setting change — it was dismissing the sheet. Because that
+backdrop is `pointer-events:none` (and the About sheet's likewise), a tap in
+the dimmed gap above the sheet passes straight through to whatever's
+underneath; with a chapter open, that's the chapter panel's own close
+button (fixed top-right, exactly where people tap to dismiss an overlay),
+so one tap closed both. Reproduced on real mobile Safari (iOS Simulator);
+the gap only appears when the sheet doesn't reach the header, so it was
+invisible at desktop pane sizes. Fixed in index.astro's `initModal()`:
+`isOverlaySheetOpen()` (checks `#settings-sheet`/`#about-sheet` for the
+`hidden` class) guards the chapter modal's close button, backdrop click and
+swipe-down-to-close. The sheets' click-through behavior was deliberately
+left alone — it's what keeps the page scrollable. The LISTEN-bar dialect
+popover has no such overlay (just a small absolutely-positioned box), so it
+needed nothing. Don't remove the guard, and test any new overlay that uses
+`pointer-events:none` for the same pass-through.
+
+## Page structure
+Essentially one page (`src/pages/index.astro`):
+1. Intro-items row (`#intro-toggle`: Bible intro | Jonah intro | Timeline,
+   Tibetan reading language only — see "Bible introduction & timeline
+   buttons" below), directly above the grid
+2. 2-col grid of 4 chapter cards — square image, dark scrim + big white
+   numeral (per client reference: a food-photography meal-plan app with the
+   same "numeral over photo" card treatment), Tibetan chapter label at the
+   bottom
+3. Cross-promo section: "Get the full New Tibetan Bible app" + official
+   App Store / Google Play badges linking to that separate sibling app. The
+   subtext under the heading is John's own wording ("The complete Bible in
+   Modern Literary Tibetan with Central, Amdo, and Kham audio.") — don't
+   rephrase it without checking; it replaced Claude's own earlier
+   paraphrase.
+
+**Modal** (opens on chapter card click): chapter label + section title
+(from SFM `\cl`/`\s` markers) and READ section (verse-by-verse or paragraph,
+per the reading-layout setting; full text always shown, no read-more
+truncation — these are short scripture chapters, not story transcripts)
+scroll inside `#modal-content`; a **sticky LISTEN bar** (`#modal-listen-bar`)
+below that never scrolls away, laid out as three rows:
+1. "LISTEN" label + current dialect name, tappable to open a small popover
+   to switch dialect (current reading language's script only — see
+   "Dialect labels" above, and "Audio dialect picker lives in the LISTEN
+   bar" further down).
+2. The seek track — the circle marking playback position doubles as the
+   play/pause button (see "Play/pause is the position circle" below).
+3. Time indicator, prev/next-verse chevrons, and the playback-speed
+   cycling button (0.5×/0.7×/0.8×/0.9×/1×/1.1×/1.2×/1.3×/1.5× — John's
+   second-round set), laid out with `justify-content: space-between` so
+   the chevrons land visually between the time and the speed control.
+   Speed persists across chapters within a session (settings-store.ts).
+Between the READ section and the copyright note is **chapter-to-chapter
+nav** (`chapterNavHtml()` in index.astro) — just a number + chevron per
+chapter (`‹ 1`, `3 ›`), not "Chapter N" (the label/title above already say
+that), prev on the left and next on the right via `justify-content:
+space-between`, omitted on either end where there's no such chapter (no
+prev on chapter 1, no next on the last chapter). A horizontal swipe on the
+reading content (left = next chapter, right = previous) does the same
+thing — John's request, since scrolling all the way down to these links
+was the only way to move between chapters before. The swipe listener is on
+`scrollDiv` (the vertically-scrolling wrapper around `#modal-content`)
+specifically, not the whole modal panel — the LISTEN bar's seek-track/
+play-button drag gesture lives on a sibling element outside `scrollDiv`,
+so a deliberate horizontal drag there can never be misread as a
+chapter-swipe. Both ways of navigating call `openChapter()` again for the
+target number — same function used for the initial open, re-entrant by
+design — rather than navigating away, so it stays inside the same
+modal/SPA pattern. `openChapter()` explicitly pauses the outgoing
+chapter's `<audio>` before regenerating the LISTEN bar's HTML (which would
+otherwise implicitly stop it anyway via element removal, but not
+necessarily instantly) so audio never bleeds across a chapter switch.
+Copyright/attribution note is the last thing inside the scrolling content.
+
+### About page
+A header icon (`Info`, between settings and share — see "App shell" above)
+opens a bottom sheet (`#about-sheet` in Layout.astro) with John's requested
+About content: title, version, copyright, a free-distribution note, a
+cross-promo line to new-tibetan-bible.com, and a contact email. Same
+dim-backdrop/outside-click-close pattern as the settings sheet, plus an
+explicit close button (matches the chapter modal's own close-button
+treatment) since this content is longer and scrolls. Body text is
+left-aligned in all three languages — only the title (`h2`) stays
+centered; it used to be fully centered like a lot of "About" screens
+default to, until Brett asked for the body to read like normal left-
+aligned prose instead. Content covers bo/cmn/en (Hindi/Nepali have no
+About-page translation yet and fall through to the English copy — same
+"no dedicated asset yet" fallback as Hindi/Nepali's English header logo
+text below) and
+re-renders on `jonah:text-settings-changed` same as the chapter modal's
+READ section — the English and Chinese copy are both Claude's provisional
+translations of John's Tibetan text and need his review, same caveat as
+other provisional translations in this doc (the dialect labels, for
+instance). Chinese needed its own character-subset fix after being added —
+see "Fonts" above.
+
+Cover art is `jonah-about-banner.webp` (`source-assets/images/
+jonah-about-banner-final.jpg` — John's finalized version of the earlier
+`-fullbody_1.jpg` draft) — one of the Sweet Publishing chapter
+illustrations with John's own logo + Tibetan "Jonah" wordmark composited
+into the bottom-left corner (John's request #14, finalized as #19),
+replacing the earlier `jonah-cover-about.png` placeholder (which had used a
+different, unfinished raster with baked-in text). Displayed at
+`width={448} height={559}` — matches this image's own ~4:5 aspect ratio
+(1484×1850), not the old placeholder's ~5:7 — re-check this if the image
+is ever swapped again.
+
+Per John's request #19, the checked-in asset is pre-shrunk rather than
+relying solely on Astro's own build-time optimization: resized from the
+1484×1850 source down to 896×1118 (2x the display size, for retina
+sharpness on a prominent hero image — not 1x, since a photo like this
+visibly softens without headroom) and converted to WebP, both with Pillow.
+File size at each step, since John asked specifically: source JPG 1.1MB →
+resized JPG 328KB → resized+WebP 179KB. (Astro's own asset pipeline then
+optimizes *that* down further to the actual served file, ~51KB at the
+`width={448}` this component renders — the manual shrink is about not
+carrying a needlessly huge original in the repo, not about the production
+file size, which Astro would have produced correctly either way.) Re-derive
+the same way (Pillow resize + WebP, quality ~82) if this image is ever
+replaced again.
+
+The copyright line reads "yohna.app", not "new-tibetan-bible.com" — Brett
+clarified that yohna.app is the custom domain John bought specifically for
+this Jonah app (distinct from new-tibetan-bible.com, the org's main site
+for the full NTB Bible app), and asked to drop the "www." he'd originally
+typed. The cross-promo line just below it deliberately still points to
+new-tibetan-bible.com — that line is specifically about the *other*,
+full-Bible app, so it keeps that app's own domain. This is Claude's
+interpretation of an ambiguous instruction (Brett's note didn't say exactly
+which line should change) — flag for Brett to confirm the copyright line
+is what he meant, not the cross-promo one. `astro.config.mjs`'s `site:`
+was deliberately left on the Netlify domain, not changed to yohna.app —
+that's a DNS/custom-domain hookup on Netlify's own dashboard, an
+account-level action, not a code change.
+
+### Book introduction — "Chapter 0", Tibetan only
+John's request #20 (third round of quick edits): NTB has written
+introductions for all 66 books (title/background, author/date, theme/
+message, outline), and wanted Jonah's added. His first idea was a
+hamburger-menu icon on the LISTEN bar opening a dedicated page — Brett
+pushed back on that specifically because the introduction is pure text
+with **no audio component at all** (confirmed: `source-assets/
+NTB_Jonah_Introduction.rtf` is the only file in the folder John pointed
+to, no accompanying audio), so putting its entry point on the *audio*
+player conflated two unrelated things. Brett's own placement, which is
+what got built: a plain text button above the 4 chapter cards on the
+homepage that opens the same modal shell a chapter uses, functioning as
+an unnumbered "Chapter 0" — closeable normally, or swipeable forward into
+chapter 1.
+
+**Content pipeline** — same "generated, not hand-authored" discipline as
+the chapters: `gen-chapters.mjs`'s `parseIntro()`/`decodeIntroRtf()` parse
+`source-assets/NTB_Jonah_Introduction.rtf` into `src/content/intro/
+jonah.json` (a new one-entry `intro` content collection, `content.config.ts`)
+every time `npm run gen-chapters` runs — don't hand-edit that JSON. The RTF
+is a Cocoa/TextEdit export whose body is *literally USFM markup typed as
+plain text* (`\mt`/`\imt`/`\is1`/`\ipi`) wrapped in Cocoa RTF's Unicode
+escaping (`\uc0\uNNNN` per character, `\\` for a literal backslash, a lone
+`\` before a real newline for a paragraph break) — `decodeIntroRtf()`
+un-escapes exactly that scheme from scratch in JS, the same "no shelling
+out to a Mac-only tool" discipline as `unescapeRtf()`/`parseBsb()` already
+use for `Jonah_BSB.rtf` (`textutil -convert txt` was used only to
+eyeball/verify the decoder's output while writing it, never as part of the
+actual pipeline). `\mt` (the book's own title) and `\imt` (the
+introduction's own longer title) become the modal's small label + heading,
+mirroring a chapter's labelBo/sectionTitleBo pairing; each `\is1` section's
+`\ipi` paragraphs — including the outline's numbered/lettered sub-points,
+which are already literal text in the source (ཀ/ཁ/ག/ང markers, verse-range
+parens) — render as plain stacked paragraphs under a gold heading, no
+special list markup needed.
+
+**Text-only, Tibetan-only, by design** — per John, no introductions for
+English/Chinese/Hindi/Nepali (NTB hasn't translated them, and there's
+nothing to translate them *from* in-app the way other provisional
+translations in this doc are Claude's own). The `#intro-toggle` element
+(index.astro, homepage markup — now a row of 3 independent buttons shared
+with the Bible introduction and timeline, see "Bible introduction &
+timeline buttons" below) starts visible in the server-rendered HTML
+(Tibetan is the default reading language) and is hidden/shown by
+`updateIntroToggleVisibility()` on every `jonah:text-settings-changed`,
+same event-driven pattern as every other reactive UI bit in this app. If the
+introduction is open and the reader switches away from Tibetan mid-view, a
+dedicated listener closes the modal outright — `renderReadSection()`
+(bound to the same event) doesn't handle this itself, since it bails out
+whenever `openChapterEntry` is null, which is always true while the
+introduction is showing (see below).
+
+**Styling — deliberately not a primary button.** Brett was explicit: no
+background, no border, since a bold filled button would visually compete
+with the chapter grid right below it for primary attention. Reviewed 3
+live variants (gold text+chevron, black text+chevron, faint-background
+pill with no chevron) before picking plain ink (`#1c1710`) text plus a
+small trailing chevron over gold — full-width for a comfortable tap
+target but with zero button "chrome". Don't add a fill, border, or
+shadow back, or swap the text color to gold, without checking first.
+
+The label sits in a true center column
+(`grid-template-columns:1fr auto 1fr`, chevron in the trailing column)
+rather than a plain flex row with the chevron as a sibling — **real bug,
+reported and fixed:** a flex layout centers the *whole* label+chevron
+group, which shifts the *text's own* center off the button's true center
+since the chevron only adds width on one side. Brett noticed this reading
+as visibly out of line with "Jonah" in the header directly above it. The
+grid's two equal (`1fr`) side columns keep the middle (text) column
+exactly centered regardless of the chevron, which lives entirely in the
+third column and never affects the text's position.
+
+**`openIntro()` reuses the chapter modal shell** (index.astro,
+`initModal()`) — same backdrop/panel/close-button/swipe-down-to-dismiss as
+a chapter, but with `listenBar.innerHTML` left empty (no audio, so no
+LISTEN bar at all) and a new `introOpen` boolean tracked alongside (never
+simultaneously with) `openChapterEntry`. Kept as a separate flag rather
+than modeling the introduction as a fake `ChapterEntry` because every
+audio/dialect/timing function in this file already treats "`openChapterEntry`
+is null" as its no-op condition (`renderReadSection`, `applyVerseHighlight`,
+`updatePrevNextEnabled`, `updateAudioForDialect`) — reusing that same null
+check for the introduction means none of them needed to change at all.
+Unlike a chapter, opening the introduction does **not** push a history
+entry — same as the About/Settings sheets in Layout.astro, it's a peek
+from the homepage, not a deep-linkable page. The bottom-of-content nav
+reuses `chapterNavHtml(0, chapters.length, 'bo')` unchanged — passing `0`
+for "current chapter" naturally omits the prev link (nothing before the
+introduction) and renders a real "1 ›" link to chapter 1, no new code
+needed there.
+
+**Swipe/nav is bidirectional between the introduction and chapter 1**
+(Brett's follow-up request, for consistency — his own words: "I don't like
+how [it's one-directional]... I'm leaning toward [both directions]"):
+- Forward (introduction → chapter 1): the chapter-to-chapter swipe handler
+  on `scrollDiv` checks `introOpen` first — a forward (left) swipe opens
+  chapter 1; a swipe right there is still a no-op (nothing before "Chapter
+  0"). The bottom "1 ›" link does the same via `bindNavLinks()`.
+- Backward (chapter 1 → introduction, Tibetan only): `chapterNavHtml()`
+  takes a `lang` parameter now — when `n === 1 && lang === 'bo'`, the
+  "prev" slot renders a `‹ ངོ་སྤྲོད།` link (`data-goto-intro`, the same
+  Tibetan word as the homepage button) instead of staying empty. The
+  swipe handler's chapter-1 branch mirrors this: `deltaX > 0 && n === 1 &&
+  getTextLang() === 'bo'` calls `openIntro()`. Both are gated on Tibetan
+  the same way the introduction button itself is — reading any other
+  language, chapter 1's "prev" slot stays empty and swiping right does
+  nothing, exactly like before this change.
+- Since this back-link's presence now depends on `lang`, not just chapter
+  number, it needs to be re-derived on a language change while chapter 1
+  is already open, not only at `openChapter()` time — `renderReadSection()`
+  regenerates `#modal-chapter-nav`'s innerHTML and re-binds its links on
+  every `jonah:text-settings-changed`, the same live-update treatment
+  already given to the label/title/dialect display right above it in that
+  function. Forgetting this step would leave a stale Tibetan-only link
+  visible after switching to English/Chinese/Hindi/Nepali on chapter 1.
+- `bindNavLinks()` is the one shared helper behind all three call sites
+  that ever render this nav (`openChapter()`, `openIntro()`,
+  `renderReadSection()`'s refresh) — binds both `a[data-goto-chapter]` and
+  `a[data-goto-intro]` clicks, since every one of those call sites
+  regenerates fresh DOM each time and needs fresh listeners to match (same
+  reasoning as `initAudioPlayer()`/`initDialectPopover()`).
+- Going from the introduction into chapter 1 (or back) is a normal
+  `openChapter(1)`/`openIntro()` call either way, so it follows the same
+  history rules already described above: entering a chapter always pushes
+  a history entry; opening the introduction never does. Closing chapter 1
+  after arriving via the back-link still goes back to wherever the
+  introduction itself was opened from (its own entry was never pushed),
+  not to the introduction a second time.
+
+### Bible introduction & timeline buttons (John's request #21, "grand slam")
+John's own prayer-walk idea, confirmed useful with Scott: add two more
+reference items alongside the existing book introduction — the NTB's own
+general Bible introduction (`source-assets/Bible introduction for NTB –
+for NTB PWA apps.rtf`) and its Creation-to-Christ timeline (6 pages,
+`source-assets/timeline/page-{1-6}.png`, renamed from the client's own
+`NTB Timeline_Tibetan Final_Pantone_7 April 2023-0N.png` — see "Asset
+locations" below). John's own suggestion was 3 separate links on the
+homepage. **Brett's placement/design call went through two rounds**: he
+first asked for all 3 combined into one row rather than cluttering the
+top of the homepage with 3 lines of text — built first as a single
+segmented toggle (one highlighted "active" segment, Jonah default-active,
+like a view-mode switcher) — then, after seeing it, preferred 3
+independent white pill buttons instead with no highlighted/default one,
+since these aren't really "modes" of a single view, just 3 separate
+things to open; the segmented-toggle version was removed in favor of this
+(see "Real bug, avoided..." below for the one piece of that first attempt
+worth remembering anyway). Also worth noting: Brett's *original* mental
+placement for this row was actually **inside** the book-introduction
+modal itself (above the Jonah intro text, when "Chapter 0" is open), not
+on the homepage — but after seeing the homepage version he was fine
+keeping it there instead of moving it. `#intro-toggle` in index.astro
+(the id/comments still say "toggle" — it isn't one anymore, but renaming
+it would just be churn) holds all 3 buttons, **left to right: Bible
+intro | Jonah's own book intro | Timeline** (John's in-country colleague's
+request, #27/#28 — reordered from the original Jonah | Bible | Timeline,
+and John asked for the same order in every book/app, not just Jonah),
+Tibetan-only labels, no icons, no active/selected styling on any of them.
+Labels are John's own exact "Title for app toggle=" wording from each
+source document (སྔོན་འགྲོ། for the Bible intro — now with a trailing
+shad/clause marker per the same colleague, #28; it was originally written
+without one — དུས་ཀྱི་བྱུང་རིམ། for the timeline — his own note: "we had to
+make the title 4 syllables as it makes no sense otherwise") — the Jonah
+button keeps the existing `ངོ་སྤྲོད།` label, unchanged. The click handler
+dispatches on each button's `data-intro-tab` attribute, not DOM position,
+so reordering the markup needed no script changes.
+
+**Content pipeline** — same "generated, not hand-authored" discipline as
+everything else:
+- **Bible introduction**: `parseBibleIntroRtf()` in gen-chapters.mjs
+  writes `src/content/bible-intro/bible-intro.json` (new `bibleIntro`
+  content collection, content.config.ts). Same Cocoa RTF export shape as
+  the book introduction's own RTF, reusing `decodeIntroRtf()` unchanged —
+  but a different, simpler marker set typed into John's source doc: one
+  `\mt` (this document's own title — no `\imt` pairing; there's no
+  separate book-name/introduction-title split here) plus `\s` section
+  headings and `\p` paragraphs (not `\is1`/`\ipi` — John's own marker
+  choice for this document, not a second convention this codebase
+  invented). Per his explicit instructions (typed into the RTF's own front
+  matter, not a separate email): `\s` section titles render gold, `\mt`
+  and `\p` text render black, same visual treatment `openIntro()` already
+  gives the book introduction, so `openBibleIntro()` needed no new
+  styling, just matching content shape (and no bottom chapter-nav, since
+  this isn't part of the chapter reading sequence at all).
+- **Real bug, caught while decoding this new RTF, not a guess**:
+  `decodeIntroRtf()` didn't handle Cocoa RTF's `\'HH` hex-escape (a single
+  cp1252-codepage byte — used for characters TextEdit treats as already
+  representable in the document's declared `\ansicpg1252`, e.g. curly
+  quotes, en/em dashes, and — what actually broke here — a non-breaking
+  space, `\'a0`, sitting mid-paragraph in real body text). Before this fix
+  the leading backslash was silently consumed with nothing else matching,
+  leaving the literal text `'a0` embedded in the generated Tibetan
+  content. Fixed with a small `CP1252_HIGH` lookup table (only the 0x80-
+  0x9F byte range actually differs from a direct byte→codepoint mapping;
+  everything else passes through as-is) — verified the fix doesn't change
+  Jonah's own existing `intro/jonah.json` output at all (that RTF never
+  happened to contain a `\'HH` escape in body text), so this was a latent
+  bug, not a regression. Watch for this again if a future RTF source ever
+  contains an em-dash, curly quote, or non-breaking space mid-paragraph.
+- **Timeline**: no text to parse at all — each of the 6 pages is a single
+  image with its own title baked in (John: "each page has its own title
+  ... it will speak for itself"). `gen-chapters.mjs` just enumerates the 6
+  pre-resized webp files in `src/assets/timeline/` into
+  `src/content/timeline/timeline.json` (new `timeline` collection) — kept
+  in the generated-JSON pipeline for consistency even though there's no
+  real parsing step, same "don't hand-edit generated JSON" discipline.
+
+**UI implementation** (index.astro): `openBibleIntro()`/`openTimeline()`
+sit alongside `openIntro()`, reusing the same modal shell (backdrop,
+panel, close button, swipe-down-to-dismiss) but — like the book
+introduction — with no LISTEN bar and no history entry (a homepage peek,
+not a deep link). Three boolean flags (`introOpen`/`bibleIntroOpen`/
+`timelineOpen`) track which of the three is open, mutually exclusive with
+each other and with `openChapterEntry`, reset together in `closeModal()`
+and in each `open*()` function — kept as three separate booleans rather
+than one enum because the existing `introOpen` checks elsewhere (the
+Tibetan-only auto-close listener, the swipe handler) already read
+naturally as "is this specific thing open", and a few call sites need
+"is any of the three open" as a group (just OR the three together) rather
+than a single tri-state needing its own null case.
+
+None of the 3 homepage buttons ever get an "active"/selected visual state
+— Brett's explicit second-round preference (see above), so there's no
+`setActiveIntroTab()`-style function here at all; each button's click
+handler just calls its own `open*()` function directly and nothing else.
+`timelinePageIdx` does still persist across closes, though (clicking the
+homepage Timeline button again reopens on whichever page was last
+viewed, not always page 1) — that's a real "which page am I on" bit of
+state, unlike the homepage row's 3 buttons, which aren't tracking a
+current selection at all. Only a fresh `openTimeline(0)` call (nothing
+currently makes one) would reset it.
+
+**Timeline's own secondary page picker** (Brett's spec: "a secondary
+toggle could appear that links people to the 6 images, with image 1 being
+the default") is rendered inside `openTimeline()`'s own content, not on
+the homepage — a numbered pill row (1-6) at the top of the modal. Unlike
+the homepage's 3 buttons, this one genuinely IS a segmented toggle with a
+real active/inactive state (`.timeline-page-btn`/`.timeline-page-btn
+.active`, solid ink fill on whichever page is current) — it's showing
+"which of the 6 pages am I on", real selection state the homepage row
+never had. Clicking a page number re-renders in place (swaps the `<img>`
+src + which segment is active) rather than closing and reopening the
+modal — the same re-entrant spirit as `openChapter()`'s own chapter-to-
+chapter nav, just without a history entry to manage.
+
+**Real layout bug, reported and fixed, then refined once more**: the
+page-picker toggle originally spanned the full content width (each of the
+6 buttons `flex:1`), which meant it could run underneath `#modal-close`
+(`position:absolute;top:1rem;right:1rem` on the panel, not this scrolling
+content) — unlike the other 3 content types, Timeline has no title text
+above the toggle to reserve that corner (they each give their title
+`padding-right:2.5rem` for exactly this reason; the toggle never had an
+equivalent). First fix: shrank the toggle to `display:inline-flex`
+(shrink-to-fit, each button its own fixed padding instead of `flex:1`).
+That solved the collision but lost the original's generous whitespace and
+bigger tap targets — Brett preferred the original spacious look after
+trying the shrunk version, so it's back to `flex:1` per button, with the
+**container** given an explicit `width:calc(100% - 3rem)` instead of a
+true `100%` — `#modal-close`'s left edge sits 3.25rem from the panel's
+right edge (`right:1rem` + its own `2.25rem` width), 2rem further in than
+this content's own `1.25rem` right padding already accounts for; 3rem
+reserves that 2rem plus a full 1rem of visible breathing room on top of
+it, landing the toggle's right edge a clean ~16px short of the close
+button rather than just barely missing it.
+
+Brett also asked for the toggle's vertical center to line up with the
+close button's — the shared `pt-6 md:pt-11` responsive top padding every
+other content type uses (sized for their title text, not this) was
+dropped for Timeline specifically in favor of a **fixed, non-responsive**
+`margin-top` on the toggle itself: `calc(1rem - 3.28px)`. 1rem matches
+`#modal-close`'s own fixed `top:1rem` (deliberately not responsive here
+either, since the close button's position never changes between
+breakpoints); the `-3.28px` corrects for the toggle's own rendered height
+being slightly taller than the close button's fixed 36px, which would
+otherwise leave their centers a few pixels apart even with matching top
+offsets. Both the sizing and the 3.28px correction came from measuring
+actual rendered positions in the browser (`getBoundingClientRect()` on
+both elements), not from calculating font metrics by hand — confirmed
+centers align within a fraction of a pixel and the horizontal gap holds
+at both phone and desktop-centered modal widths, in both the
+shrink-to-fit version and this wider one (the vertical math doesn't
+depend on the container's width, only its height, which is unchanged
+between the two — same `.25rem` container padding and `.4rem` button
+padding either way). Re-measure and adjust 3.28px if the toggle's own
+font-size/padding, or the close button's size, ever changes. Don't shrink
+this back to `inline-flex` without checking first — that was already
+tried and explicitly reverted for feeling too cramped/precise to tap.
+
+**Real bug, avoided by applying an already-learned lesson**: `#intro-
+toggle`'s own inline style sets `display:flex` for its layout — toggling
+a plain `hidden` class on it would have silently done nothing (an inline
+style always wins over a class-based rule regardless of specificity),
+exactly the bug that shipped once already on `ntb-ruth`'s copy of this
+same "hide unless Tibetan" pattern before being caught there. Avoided here
+from the start: `updateIntroToggleVisibility()` sets `style.display`
+directly (`'flex'`/`'none'`) instead of touching classList at all.
+
+**Timeline swipe (request #25):** the same left/right gesture as chapter
+reading now moves between the 6 timeline pages — a `timelineOpen` branch in
+the `scrollDiv` touchend handler (next to the `introOpen` one), calling
+`goToTimelinePage(idx)`, which the page-picker buttons also call now (it
+used to be inline in each button's click handler). `goToTimelinePage()`
+no-ops outside `0..pages.length-1`, so callers never bounds-check and
+swiping at the first/last page does nothing, same as chapter swiping at
+the book's edges.
+
+**Timeline font size (request #26) is a question for John, not code:** the
+pages are single baked-in images (960px-wide webp, displayed at roughly
+335–410 CSS px on a phone, so ~2.3–3x smaller than the file), so text size
+can only change by John re-exporting the images. Brett's answer to him: pick
+a minimum font size, test legibility by previewing at ~350–400px wide, trim
+page margins as needed, re-export. When new PNGs arrive, re-run the same
+resize/webp pipeline (see "Asset locations") — no code change needed.
+
+### Intro modals' gold titles are +1pt over body text (requests #29, #30)
+The gold master title (`mainTitle`) and gold section headings (`<h3>`) in
+the Jonah introduction (1 + 4 of them), and the gold section headings in
+the Bible introduction (2 of them), use `font-size:calc(var(--reading-font-
+size,1.15rem) + 1pt)` — not a fixed rem. Body paragraphs track the reader's
+text-size setting through that same variable, so a fixed heading size would
+stop being "1pt larger" the moment the reader changed size; verified in the
+browser (21.73px vs. 20.4px body, an exact 1.333px/1pt gap). The black
+`introTitle`/Bible-intro `<h2>` were deliberately left alone — the request
+was about the *gold* text only.
+
+### Tibetan typography: shad spacing and justification (requests #31, #32)
+John's in-country team asked for print-style Tibetan typesetting. Both
+pieces are **render-time transforms in index.astro** — the generated JSON
+and source SFM are never changed — applied wherever Tibetan *reading* text
+is rendered (verse-by-verse, paragraph mode, and the body/headings of both
+intro modals). The helper functions live next to `verseInnerHtml()`.
+
+**Shad spacing (`formatTibetanShads()`, #32).** Rules are John's, worked out
+with Claude Cowork on a PDF booklet:
+- A single shad keeps the source's ordinary space — untouched.
+- A double shad is two shads with a real U+2002 EN SPACE between them, set
+  in DejaVu Sans at `font-size:80%` (so it reads as 0.8 en; DejaVu rather
+  than the Tibetan font for predictable space metrics), inside a
+  `white-space:nowrap` span so it never breaks across lines. In the source
+  this appears **two ways** — literal `།།` (two U+0F0D) and the single
+  `༎` (U+0F0E); both get the same treatment, and `༎` is deliberately
+  *displayed* as །+། (source unchanged). Jonah's source has 22 `༎` (mostly
+  the line endings of chapter 2's poetry) and 33 literal `།།`; Ruth's has
+  no `༎` at all.
+- The four-shad book ending (`།། །།`, Jonah 4:11 / Ruth 4:22) is shad,
+  0.8-en, shad, **EM SPACE (U+2003)**, shad, 0.8-en, shad, all nowrap. Its
+  regex runs *before* the plain double-shad pass, or that pass would eat
+  each half separately and leave a plain space between them.
+
+**Justification (`justifyTibetanTsheg()` + `.tibetan-justify` + `.ts`, #31).**
+Goal: a straight right margin (Tibetan print convention). A browser's
+`text-align:justify` only stretches at U+0020 spaces, and Tibetan has few
+real ones, so every tsheg (U+0F0B) not already followed by whitespace gets
+`<span class="ts"> </span>` after it, where `.ts{word-spacing:-0.2735em}`.
+0.2735em is the space glyph's advance (279/1020 units, via fontTools
+`hmtx[cmap[32]]`) — **identical in all three bundled fonts**, so no
+per-font calibration — which makes the space zero-width at rest while still
+being a stretch point. `.tibetan-justify` (global.css) adds
+`text-align:justify; text-justify:inter-word`; it's applied only to Tibetan
+body blocks (verse blocks, paragraph `<p>`s, intro paragraphs), not headings
+or other languages. Verified on desktop (non-final lines flush to the
+container edge, final line unstretched) **and real mobile Safari** (iOS
+Simulator) — Safari's justify behavior was the real risk. The left-margin
+rules (no tsheg/shad starting a line) turned out to need nothing extra:
+both are break-*after* characters, so default line breaking already keeps
+them at line ends. This was built as a **prototype pending John's review**;
+if his team dislikes it, removing `justifyTibetanTsheg()` from the call
+sites and the `tibetan-justify` class is the whole revert. Don't add
+per-language or per-font tweaks without re-checking in Safari.
+
+## What NOT to do
+- Do not add SSR or any adapter — static output only
+- Do not add React, Preact, Vue, or any JS framework
+- Do not navigate to `/chapter/[n]` from within the app — use the modal
+- Do not use `src/content/config.ts` (legacy) — use `src/content.config.ts`
+- Do not hand-edit `src/content/chapters/*.json` — edit the generator
+- Do not use plain gold (`#CFB63C`) as small text/icon color on light
+  backgrounds — fails contrast; use `gold-deep` or ink instead
+- Do not remove the manually-injected PWA tags from Layout.astro
+- Do not add per-modal language/font/size/layout toggles back — these are
+  global header settings now (`settings-store.ts`); the modal only reflects
+  them. Dialect is global state too, picked from **both** the LISTEN bar's
+  5-option popover and the settings sheet's Tibetan-only 3-option row (see
+  "Audio dialect picker" above) — not exclusively one or the other
+- Do not add `eng`/`cmn` buttons to the settings sheet's dialect row, and
+  don't show that row for non-Tibetan reading languages — it's specifically
+  the 3-Tibetan-dialect narrowing tool, gated on `lang === 'bo'`; the
+  LISTEN-bar popover is the 5-option "any audio track" picker
+- Do not change the settings icon away from `Settings` (the gear) without
+  checking first — it's cycled through a literal "T" and Lucide's `Type`
+  before settling back on the gear once audio settings returned to this
+  sheet (see "Header icon" above)
+- Do not put the full "New Tibetan Bible - Jonah" / `བོད་འགྱུར་གསར་མ། ཡོ་ནཱ།`
+  title back in the header without re-verifying the 375px fit test above
+- Do not make the header title/logo language-reactive on every page — only
+  on pages using the default title (`data-reactive-title`); the static
+  `/chapter/[n]` fallback keeps its own custom title and the Tibetan logo
+  regardless of reading language (see "Header title and logo react to
+  reading language" above)
+- Do not enlarge `#header-logo-text` ("New Tibetan Bible" in English mode)
+  without re-measuring against the centered title — at normal logo/title
+  text size it visibly overlapped "Jonah"; it's deliberately `text-xs` with
+  tight letter-spacing to fit
+- Do not reskin or recreate the App Store/Google Play badges — use the
+  official artwork in `public/badges/` as-is
+- Do not add a new top-level `<script>` to Layout.astro without wrapping its
+  init logic in `document.addEventListener('astro:page-load', ...)` with an
+  `AbortController` guard — see "Header buttons need re-init" above
+- Do not show both scripts (Tibetan + English) on the dialect buttons again —
+  only the current reading language's script shows now, per feedback
+- Do not give the settings sheet's backdrop `pointer-events: auto` again —
+  it must stay `none` so the page underneath stays scrollable/tappable while
+  the sheet is open; close-on-outside-click is a `document` listener instead
+- Do not reintroduce a separate large play/pause button — the position
+  circle on the LISTEN seek track doubles as play/pause now (see "Play/pause
+  is the position circle" above); don't add backgrounds back to the
+  prev/next chevrons or the speed button either
+- Do not give the speed button an auto/content-based width again — it must
+  stay fixed-width or the chevrons visibly shift position across the nine
+  speed values (0.5×–1.5×, see "Play/pause is the position circle" above)
+- Do not reset playback speed to 1× on chapter open — it persists across
+  chapters within a session via `getPlaybackSpeed()`/`setPlaybackSpeed()`
+  in settings-store.ts (John: it used to reset every chapter switch)
+- Do not spell out "Verse-by-verse"/"Paragraph" or shrink the audio dialect
+  labels back down in English — layout uses "1 2 3"/"¶" glyphs, and the
+  English dialect labels (Amdo/Central/Kham) match the layout row's text-xl
+  size, both per feedback
+- Do not put the gold circle fill back on the header logo, and don't add a
+  CSS `rounded-full`/border treatment to it — it's now the self-contained
+  wordmark-on-gold-pill graphic (`ntb-navbar-wordmark-gold.png`), not a
+  transparent icon mark needing a CSS circle drawn around it
+- Do not put a fixed height back on the header row (`h-[56px]` etc.) — see
+  "The header row has no fixed height" above; it must size from its own
+  content so a large safe-area inset can't squeeze the logo into overflow
+- Do not give verse numbers the Tibetan reading font again — `.verse-num`
+  is deliberately a plain system font at `0.7em` with `vertical-align:
+  middle` (not `<sup>`'s default raised position); the Tibetan font's own
+  digit glyphs read oversized/high at the same nominal size, which was the
+  original complaint
+- Do not add Hindi/Nepali to the `Dialect` type, the LISTEN-bar's 5-option
+  popover, or the settings sheet's Tibetan-only dialect row — they're
+  text-only reading languages with no audio track (see "Reading languages
+  vs. audio tracks" above); don't couple them to a dialect in
+  `setTextLang()` either, that's what lets any of the 5 existing audio
+  tracks pair with Hindi/Nepali text
+- Do not change the About page's copyright line back to
+  new-tibetan-bible.com, and don't change the cross-promo line to
+  yohna.app — they're deliberately different domains now (see "About page"
+  above); if this reads wrong, it's Claude's interpretation of an
+  ambiguous instruction, not a settled decision — check with Brett first
+- The plain-text/no-background treatment Brett originally specified for
+  the book-introduction button (see "Book introduction" above) no longer
+  applies as of request #21 — it's now one of 3 white pill buttons in a
+  row (`#intro-toggle`, see "Bible introduction & timeline buttons"
+  above), Brett's own explicit design for accommodating the two new intro
+  items without cluttering the homepage; don't revert to a plain-text
+  button without checking first, since that would mean redesigning the
+  Bible-intro/timeline buttons too, not just Jonah's own
+- Do not add a highlighted/"active" visual state to any of the 3 homepage
+  intro-item buttons — Brett tried a segmented-toggle version with one
+  default-active button first and explicitly preferred all 3 identical
+  with none selected (see "Bible introduction & timeline buttons" above);
+  the Timeline modal's own internal 6-page picker is a different, real
+  selection state and keeps its active styling — don't confuse the two
+- Do not add English/Chinese/Hindi/Nepali content to the book introduction,
+  and don't show `#intro-toggle` for any reading language but Tibetan —
+  NTB hasn't translated the introduction into those languages (see "Book
+  introduction" above)
+- Do not give the introduction its own history entry / URL — it's a
+  homepage peek like the About/Settings sheets, even though chapter 1 now
+  links/swipes back to it (see "Book introduction" above); closing chapter
+  1 after arriving that way still goes back to before the introduction was
+  opened, not to the introduction itself
+- Do not add the chapter-1-back-to-introduction link/swipe for any reading
+  language but Tibetan — it's gated in both `chapterNavHtml()` and the
+  swipe handler the same way `#intro-toggle` is, and needs to disappear
+  (not just stay stale) if the reader switches language while chapter 1 is
+  open (see "Book introduction" above)
+- Do not add English/Chinese/Hindi/Nepali content to the Bible introduction
+  or timeline either, and don't show `#intro-toggle` for any reading
+  language but Tibetan — same reasoning and same gating mechanism as the
+  book introduction (see "Bible introduction & timeline buttons" above)
+- Do not toggle `#intro-toggle`'s visibility with `classList.toggle
+  ('hidden', ...)` — its own inline style sets `display:flex`, which wins
+  over any class-based rule regardless of specificity; use
+  `style.display = 'flex' | 'none'` directly (see
+  `updateIntroToggleVisibility()`) — this exact mistake already shipped
+  once on `ntb-ruth`'s copy of this pattern before being caught
+- Do not add the Bible introduction or timeline to the homepage as separate
+  standalone links, and don't move them into the book-introduction modal
+  either — Brett considered both (his own first mental placement was
+  actually inside that modal, above the Jonah intro text) but settled on
+  keeping all 3 as one row of homepage buttons instead (see "Bible
+  introduction & timeline buttons" above)
+- Do not reset the timeline's `timelinePageIdx` in `closeModal()` — it
+  deliberately persists across a close so re-opening Timeline doesn't
+  always land back on page 1; only visiting a *different* page changes it
+- Do not put the 3 homepage intro buttons back in Jonah | Bible | Timeline
+  order, or drop the trailing shad from the Bible intro label — the order
+  is Bible | Jonah | Timeline for every book (#27/#28)
+- Do not give the gold intro titles a fixed font size — they're `calc(var(
+  --reading-font-size,1.15rem) + 1pt)` so they stay 1pt over body text at
+  every text-size setting (#29/#30)
+- Do not hand-edit the generated JSON to add shad spacing or tsheg spans,
+  or change the shad rules (single shad untouched; double = two shads +
+  0.8-en space; four-shad ending gets an EM space) without John's say-so —
+  they're render-time only and come straight from his in-country team
+  (#31/#32). Don't give Tibetan justification per-font word-spacing values:
+  all three bundled fonts share 0.2735em
+- Do not remove `isOverlaySheetOpen()` from the chapter modal's close
+  button/backdrop/swipe-down handlers — without it, tapping outside the
+  settings/About sheet also closes the open chapter (#34)
+- Do not show a guessed Hindi/Nepali org name in the header; Chinese's is
+  藏文圣经新译本 (confirmed, #33) and the rest use the English text
+
+## Pending / open items
+- **Everything about Esther is new and unreviewed by John.** Specifically:
+  illustration placements (filename-based, only partly checkable against the
+  PDF — see above), the 10 chapter-card cover picks, the provisional Nepali
+  chapter titles, the English/Chinese About copy (carried over from Jonah's
+  provisional translations), and the Esther-specific audio set (adds English;
+  no Chinese).
+- Chinese audio doesn't exist — ask Brett/John whether to produce it
+  (Jonah/Ruth's is ElevenLabs), then follow "To add Chinese audio later" above.
+- #31 (justification) and the rest of requests #24-34 are in Esther because
+  the base was Jonah; they are still pending John's review there. #26
+  (timeline text size) waits on John's re-exported images — when they come,
+  re-run the resize/webp pipeline for `src/assets/timeline/` in **all
+  three** apps.
+- No custom domain; `site:` in astro.config.mjs is the placeholder
+  `ntb-esther.netlify.app`.
+
+## Deployment
+- **Netlify**, via GitHub (`https://github.com/brett-vmx/ntb-esther.git`) →
+  auto-deploy on push to `main`. **Not created yet** — the repo was
+  initialized locally but nothing has been committed, pushed, or connected to
+  Netlify (Brett: never commit/push without being asked — Netlify credits).
+- Cloudflare Pages doesn't honor HTTP Range requests, which this app's audio
+  seeking depends on — that's why Netlify, and why `src/sw.js` has the
+  Range-aware strategy (see "Cloudflare Pages doesn't support Range
+  requests").
+- Build command: `npm run build`; output directory: `dist`.

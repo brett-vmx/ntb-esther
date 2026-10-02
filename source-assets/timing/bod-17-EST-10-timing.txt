@@ -1,0 +1,7 @@
+﻿\id EST
+\c 10
+\level verse
+\separators . ? ! : ; ,
+2	7.1	1
+7.1	19.7	2
+19.7	40.08	3
