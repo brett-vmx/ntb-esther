@@ -55,9 +55,9 @@ public/
 
 ## Audio
 
-The three Tibetan dialects (John's recordings) plus English (the BSB reading).
-There is no Chinese recording yet. English verse timing is generated locally —
-see `scripts/english-timing/`.
+The three Tibetan dialects (John's recordings), English (the BSB reading) and
+Chinese (CUV, Wordproject's recording). English and Chinese verse timing is
+generated locally — see `scripts/english-timing/` and `scripts/chinese-timing/`.
 `AVAILABLE_DIALECTS` in `src/i18n/settings-store.ts` is the single switch for
 which tracks the app offers — see CLAUDE.md for how to add more.
 

@@ -187,24 +187,20 @@ const NEPALI_TITLES = {
 // Dialect audio durations in seconds, read with ffprobe from the MP3s in
 // public/audio (adx/bod/khg = Amdo/Central/Kham; eng = English, the BSB
 // reading from biblestudytools.com/audio-bible/bsb/esther/, one file per
-// chapter, already 44.1kHz mono 64kbps so copied as-is). Esther has NO Chinese
-// audio yet (unlike Jonah/Ruth), so there is no cmn entry — buildChapter()
-// emits null for that track (and for its duration and timing), which the app
-// treats as "this audio track doesn't exist" (see CLAUDE.md's "Esther has
-// only the Tibetan tracks plus English"). If cmn audio ever arrives, add the
-// files + entries here and in buildChapter(), then set AVAILABLE_DIALECTS in
-// settings-store.ts.
+// chapter, already 44.1kHz mono 64kbps so copied as-is). Esther's Chinese
+// cmn = Chinese (CUV), Wordproject's recording (wordproject.org/bibles/audio/
+// 04_chinese/b17.htm), copied as-is (22.05kHz mono 24kbps — not re-encoded).
 const DURATIONS = {
-  1: { adx: 418.8, bod: 257.2, khg: 251.6, eng: 217.2 },
-  2: { adx: 471.7, bod: 289.7, khg: 277.0, eng: 243.0 },
-  3: { adx: 295.0, bod: 186.9, khg: 185.4, eng: 165.7 },
-  4: { adx: 288.7, bod: 184.7, khg: 177.5, eng: 165.7 },
-  5: { adx: 239.9, bod: 156.3, khg: 152.1, eng: 143.8 },
-  6: { adx: 259.3, bod: 171.5, khg: 164.4, eng: 142.2 },
-  7: { adx: 200.3, bod: 129.4, khg: 122.3, eng: 112.4 },
-  8: { adx: 362.7, bod: 231.5, khg: 222.9, eng: 196.8 },
-  9: { adx: 510.4, bod: 330.8, khg: 328.3, eng: 297.4 },
-  10: { adx: 57.7, bod: 40.1, khg: 37.3, eng: 33.8 },
+  1: { adx: 418.8, bod: 257.2, khg: 251.6, eng: 217.2, cmn: 248.8 },
+  2: { adx: 471.7, bod: 289.7, khg: 277.0, eng: 243.0, cmn: 278.6 },
+  3: { adx: 295.0, bod: 186.9, khg: 185.4, eng: 165.7, cmn: 197.5 },
+  4: { adx: 288.7, bod: 184.7, khg: 177.5, eng: 165.7, cmn: 186.0 },
+  5: { adx: 239.9, bod: 156.3, khg: 152.1, eng: 143.8, cmn: 167.2 },
+  6: { adx: 259.3, bod: 171.5, khg: 164.4, eng: 142.2, cmn: 167.1 },
+  7: { adx: 200.3, bod: 129.4, khg: 122.3, eng: 112.4, cmn: 138.2 },
+  8: { adx: 362.7, bod: 231.5, khg: 222.9, eng: 196.8, cmn: 222.0 },
+  9: { adx: 510.4, bod: 330.8, khg: 328.3, eng: 297.4, cmn: 341.2 },
+  10: { adx: 57.7, bod: 40.1, khg: 37.3, eng: 33.8, cmn: 36.8 },
 };
 
 // Real bug, caught while adding Chinese chapter 1's duration (239.6s):
@@ -717,12 +713,10 @@ function parseIndicUsfm(raw) {
 //    Jonah's own (see CLAUDE.md's "Verse-timing / read-along highlight").
 //    adx/bod/khg came from John's forced-aligner exports, same three
 //    filename conventions as Jonah (book code updated to 17_EST/17-EST).
-//    Esther only has the three Tibetan tracks (adx/bod/khg) — eng/cmn are
-//    never looked up (buildChapter() emits null for them). If English/
-//    Chinese audio ever arrives, generate their timing the way Jonah's was
-//    (local mlx-whisper transcription + difflib alignment against this
-//    script's own parsed verse text — see ntb-jonah's CLAUDE.md) and add
-//    them back here.
+//    eng/cmn have no such export, so their timing is generated locally
+//    (scripts/english-timing/ and scripts/chinese-timing/: mlx-whisper
+//    transcription + difflib alignment against this script's own parsed
+//    verse text) and written to source-assets/timing/{eng,cmn}_17_EST_N.txt.
 // ---------------------------------------------------------------------------
 
 function findTimingFile(dialect, n) {
@@ -836,21 +830,21 @@ function buildChapter(n, sfmChapter, bsbChapter, cmnChapter, hiChapter, neChapte
       bod: `/audio/bod/chapter-${n}.mp3`,
       khg: `/audio/khg/chapter-${n}.mp3`,
       eng: `/audio/eng/chapter-${n}.mp3`,
-      cmn: null,
+      cmn: `/audio/cmn/chapter-${n}.mp3`,
     },
     duration: {
       adx: fmtDuration(DURATIONS[n].adx),
       bod: fmtDuration(DURATIONS[n].bod),
       khg: fmtDuration(DURATIONS[n].khg),
       eng: fmtDuration(DURATIONS[n].eng),
-      cmn: null,
+      cmn: fmtDuration(DURATIONS[n].cmn),
     },
     timing: {
       adx: parseTiming('adx', n),
       bod: parseTiming('bod', n),
       khg: parseTiming('khg', n),
       eng: parseTiming('eng', n),
-      cmn: null,
+      cmn: parseTiming('cmn', n),
     },
     blocks,
   };

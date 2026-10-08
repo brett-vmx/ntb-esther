@@ -18,14 +18,14 @@
     "bod": "/audio/bod/chapter-10.mp3",
     "khg": "/audio/khg/chapter-10.mp3",
     "eng": "/audio/eng/chapter-10.mp3",
-    "cmn": null
+    "cmn": "/audio/cmn/chapter-10.mp3"
   },
   "duration": {
     "adx": "0:58",
     "bod": "0:40",
     "khg": "0:37",
     "eng": "0:34",
-    "cmn": null
+    "cmn": "0:37"
   },
   "timing": {
     "adx": [
@@ -84,7 +84,20 @@
         "time": 21.28
       }
     ],
-    "cmn": null
+    "cmn": [
+      {
+        "verse": 1,
+        "time": 6.6
+      },
+      {
+        "verse": 2,
+        "time": 11.62
+      },
+      {
+        "verse": 3,
+        "time": 22.24
+      }
+    ]
   },
   "blocks": [
     {

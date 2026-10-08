@@ -18,14 +18,14 @@
     "bod": "/audio/bod/chapter-9.mp3",
     "khg": "/audio/khg/chapter-9.mp3",
     "eng": "/audio/eng/chapter-9.mp3",
-    "cmn": null
+    "cmn": "/audio/cmn/chapter-9.mp3"
   },
   "duration": {
     "adx": "8:30",
     "bod": "5:31",
     "khg": "5:28",
     "eng": "4:57",
-    "cmn": null
+    "cmn": "5:41"
   },
   "timing": {
     "adx": [
@@ -548,7 +548,136 @@
         "time": 290.26
       }
     ],
-    "cmn": null
+    "cmn": [
+      {
+        "verse": 1,
+        "time": 6.4
+      },
+      {
+        "verse": 2,
+        "time": 21.68
+      },
+      {
+        "verse": 3,
+        "time": 34.58
+      },
+      {
+        "verse": 4,
+        "time": 43.86
+      },
+      {
+        "verse": 5,
+        "time": 49.92
+      },
+      {
+        "verse": 6,
+        "time": 56.84
+      },
+      {
+        "verse": 7,
+        "time": 61.3
+      },
+      {
+        "verse": 8,
+        "time": 65.8
+      },
+      {
+        "verse": 9,
+        "time": 70.2
+      },
+      {
+        "verse": 10,
+        "time": 76.76
+      },
+      {
+        "verse": 11,
+        "time": 87.66
+      },
+      {
+        "verse": 12,
+        "time": 93.06
+      },
+      {
+        "verse": 13,
+        "time": 113.76
+      },
+      {
+        "verse": 14,
+        "time": 128.96
+      },
+      {
+        "verse": 15,
+        "time": 139.36
+      },
+      {
+        "verse": 16,
+        "time": 149.98
+      },
+      {
+        "verse": 17,
+        "time": 166.04
+      },
+      {
+        "verse": 18,
+        "time": 175.32
+      },
+      {
+        "verse": 19,
+        "time": 186.22
+      },
+      {
+        "verse": 20,
+        "time": 198.3
+      },
+      {
+        "verse": 21,
+        "time": 205.68
+      },
+      {
+        "verse": 22,
+        "time": 210.44
+      },
+      {
+        "verse": 23,
+        "time": 226.26
+      },
+      {
+        "verse": 24,
+        "time": 235.86
+      },
+      {
+        "verse": 25,
+        "time": 248.66
+      },
+      {
+        "verse": 26,
+        "time": 263.22
+      },
+      {
+        "verse": 27,
+        "time": 274.94
+      },
+      {
+        "verse": 28,
+        "time": 283.88
+      },
+      {
+        "verse": 29,
+        "time": 300.48
+      },
+      {
+        "verse": 30,
+        "time": 312.1
+      },
+      {
+        "verse": 31,
+        "time": 320.88
+      },
+      {
+        "verse": 32,
+        "time": 335.16
+      }
+    ]
   },
   "blocks": [
     {

@@ -18,14 +18,14 @@
     "bod": "/audio/bod/chapter-4.mp3",
     "khg": "/audio/khg/chapter-4.mp3",
     "eng": "/audio/eng/chapter-4.mp3",
-    "cmn": null
+    "cmn": "/audio/cmn/chapter-4.mp3"
   },
   "duration": {
     "adx": "4:49",
     "bod": "3:05",
     "khg": "2:58",
     "eng": "2:46",
-    "cmn": null
+    "cmn": "3:06"
   },
   "timing": {
     "adx": [
@@ -308,7 +308,76 @@
         "time": 160.58
       }
     ],
-    "cmn": null
+    "cmn": [
+      {
+        "verse": 1,
+        "time": 6.36
+      },
+      {
+        "verse": 2,
+        "time": 17.22
+      },
+      {
+        "verse": 3,
+        "time": 24.04
+      },
+      {
+        "verse": 4,
+        "time": 35.46
+      },
+      {
+        "verse": 5,
+        "time": 49.72
+      },
+      {
+        "verse": 6,
+        "time": 62.68
+      },
+      {
+        "verse": 7,
+        "time": 68.4
+      },
+      {
+        "verse": 8,
+        "time": 78.3
+      },
+      {
+        "verse": 9,
+        "time": 95.34
+      },
+      {
+        "verse": 10,
+        "time": 100.46
+      },
+      {
+        "verse": 11,
+        "time": 105.64
+      },
+      {
+        "verse": 12,
+        "time": 126.4
+      },
+      {
+        "verse": 13,
+        "time": 129.9
+      },
+      {
+        "verse": 14,
+        "time": 139.54
+      },
+      {
+        "verse": 15,
+        "time": 156.42
+      },
+      {
+        "verse": 16,
+        "time": 160.92
+      },
+      {
+        "verse": 17,
+        "time": 180
+      }
+    ]
   },
   "blocks": [
     {

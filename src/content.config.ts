@@ -48,8 +48,8 @@ const chapters = defineCollection({
         adx: z.string(), // Amdo
         bod: z.string(), // Central / Lhasa
         khg: z.string(), // Kham
-        // English/Chinese audio don't exist for Esther yet — null, not a path
-        // (see CLAUDE.md, "Esther has only the three Tibetan audio tracks").
+        // Nullable so a track can be absent for a future book — every Esther
+        // track exists now (see CLAUDE.md, "Esther's audio tracks").
         eng: z.string().nullable(),
         cmn: z.string().nullable(),
       }),

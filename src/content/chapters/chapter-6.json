@@ -18,14 +18,14 @@
     "bod": "/audio/bod/chapter-6.mp3",
     "khg": "/audio/khg/chapter-6.mp3",
     "eng": "/audio/eng/chapter-6.mp3",
-    "cmn": null
+    "cmn": "/audio/cmn/chapter-6.mp3"
   },
   "duration": {
     "adx": "4:19",
     "bod": "2:52",
     "khg": "2:44",
     "eng": "2:22",
-    "cmn": null
+    "cmn": "2:47"
   },
   "timing": {
     "adx": [
@@ -260,7 +260,64 @@
         "time": 134.14
       }
     ],
-    "cmn": null
+    "cmn": [
+      {
+        "verse": 1,
+        "time": 6.32
+      },
+      {
+        "verse": 2,
+        "time": 12.6
+      },
+      {
+        "verse": 3,
+        "time": 25.72
+      },
+      {
+        "verse": 4,
+        "time": 37.54
+      },
+      {
+        "verse": 5,
+        "time": 49.56
+      },
+      {
+        "verse": 6,
+        "time": 56.9
+      },
+      {
+        "verse": 7,
+        "time": 72.76
+      },
+      {
+        "verse": 8,
+        "time": 77.86
+      },
+      {
+        "verse": 9,
+        "time": 81.44
+      },
+      {
+        "verse": 10,
+        "time": 99.68
+      },
+      {
+        "verse": 11,
+        "time": 113.82
+      },
+      {
+        "verse": 12,
+        "time": 128.68
+      },
+      {
+        "verse": 13,
+        "time": 136.02
+      },
+      {
+        "verse": 14,
+        "time": 158.1
+      }
+    ]
   },
   "blocks": [
     {

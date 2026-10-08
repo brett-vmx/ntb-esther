@@ -59,7 +59,7 @@ const LAYOUTS: readonly TextLayout[] = ['verse', 'paragraph'];
 // "match the audio to the reading language" coupling. Adding English/Chinese
 // audio later is therefore: drop the mp3s + timing in, extend gen-chapters.mjs
 // and src/sw.js's AUDIO_URLS, and add 'cmn' here — nothing else.
-export const AVAILABLE_DIALECTS: readonly Dialect[] = ['adx', 'bod', 'khg', 'eng'];
+export const AVAILABLE_DIALECTS: readonly Dialect[] = ['adx', 'bod', 'khg', 'eng', 'cmn'];
 const DIALECTS: readonly Dialect[] = AVAILABLE_DIALECTS;
 const TIBETAN_DIALECTS: readonly Dialect[] = ['adx', 'bod', 'khg'];
 

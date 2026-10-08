@@ -40,29 +40,38 @@ CC BY-NC-ND 4.0.
 bigger than Jonah (4 chapters) or Ruth (4): 10 chapters (22/23/15/17/14/14/10/
 17/32/3 verses), so the homepage grid is 5 rows of 2 cards.
 
-**Esther has four audio tracks — the three Tibetan dialects plus English —
-and no Chinese audio.** John supplied adx/bod/khg; English is the BSB reading
-from `https://www.biblestudytools.com/audio-bible/bsb/esther/` (direct mp3s at
+**Esther has five audio tracks — the three Tibetan dialects, English and
+Chinese.** John supplied adx/bod/khg; English is the BSB reading from
+`https://www.biblestudytools.com/audio-bible/bsb/esther/` (direct mp3s at
 `content.swncdn.com/biblestudytools/audio/bsb-mp3/17_es_NNN.mp3`; 10 files,
 28.6 min, 13MB, already 44.1kHz mono 64kbps so copied as-is to
-`public/audio/eng/chapter-N.mp3`). Jonah/Ruth have all five tracks (their
-Chinese is ElevenLabs TTS); Esther's Chinese hasn't been made, and whether to
-make it is John's call. The mechanism is one list:
-`AVAILABLE_DIALECTS = ['adx','bod','khg','eng']` in `src/i18n/settings-store.ts`.
+`public/audio/eng/chapter-N.mp3`). **Chinese (CUV) is Wordproject's recording**
+(`https://www.wordproject.org/bibles/audio/04_chinese/b17.htm`; files at
+`wordproaudio.net/bibles/app/audio/4/17/N.mp3`), downloaded at Brett's request
+and copied as-is to `public/audio/cmn/chapter-N.mp3` — 22.05kHz mono 24kbps,
+~5.8MB total, NOT re-encoded (upsampling a lossy file only adds artifacts).
+Jonah/Ruth's Chinese is ElevenLabs TTS instead. **Open questions for Brett/
+John:** Wordproject's reuse/licensing terms haven't been read (check their
+copyright page before this ships widely), and the wording was verified as CUV
+only by ASR transcript match on Jonah ch.1 plus 96-99% pinyin match against
+our own CUV text on every Esther chapter.
+The mechanism is one list:
+`AVAILABLE_DIALECTS = ['adx','bod','khg','eng','cmn']` in `src/i18n/settings-store.ts`.
 Everything that offers or validates an audio track reads it:
 - the LISTEN-bar popover (index.astro) renders only those options (it's
   generated from the list, not hard-coded buttons),
 - `getDialect()` ignores a stored value outside the list,
-- `setTextLang()` only snaps the audio to English/Chinese *if that track
-  exists* — so for Esther, English text snaps to the English track, while
-  switching to Chinese (no audio) leaves the current track playing, exactly
-  like Hindi/Nepali always did.
-In the generated JSON, `audio.cmn`, `duration.cmn` and `timing.cmn` are `null`
-(schema: `.nullable()`). **To add Chinese audio later:** drop the files into
-`public/audio/cmn/chapter-N.mp3` (44.1kHz/64kbps), add timing + entries in
-`gen-chapters.mjs` (`DURATIONS`, `buildChapter()`), extend `AUDIO_URLS` in
-`src/sw.js` — and add `'cmn'` to `AVAILABLE_DIALECTS`. Nothing else. Don't add a
-track to the popover without the audio actually existing.
+- `setTextLang()` snaps the audio to English/Chinese *if that track exists*
+  (both do now; a future book lacking one just leaves the current track playing,
+  like Hindi/Nepali always did).
+Schema keeps `audio/duration.{eng,cmn}` `.nullable()` for such a book.
+**Chinese verse timing was generated locally**, same method as English:
+`scripts/chinese-timing/transcribe.py` (mlx-whisper, zh) + `align.py`, which
+difflib-aligns on toneless **pinyin** (so simplified/traditional and homophone
+errors don't matter) and writes `source-assets/timing/cmn_17_EST_N.txt`.
+96-99% of syllables matched in every chapter, no verse under 60%. CUV folds
+1:14 into 1:13 (the verse's `cmn` is empty), so 1:14 has no cmn timing row.
+The recordings open with a spoken "《以斯帖记》第N章" (~6s) before verse 1.
 
 **English verse timing was generated locally** (like Jonah's eng/cmn): the
 BSB audio has no timing export, so `scripts/english-timing/transcribe.py`
@@ -249,7 +258,7 @@ label, so `ENGLISH_LABELS`/`CHINESE_LABELS`/`INDIC_CHAPTER_LABELS` cover
 those.
 
 ### Reading languages vs. audio tracks — related but independent settings
-**Esther note:** the `Dialect` type still lists all five values, but only the three in `AVAILABLE_DIALECTS` exist for this book — see "Esther-specific differences". The text below describes Jonah's five-track setup.
+**Esther note:** the `Dialect` type still lists all five values, but only those in `AVAILABLE_DIALECTS` exist for this book — see "Esther-specific differences". The text below describes Jonah's five-track setup.
 
 Two different concepts, easy to conflate:
 - **Reading language** (`TextLang` in settings-store.ts): `'bo' | 'en' |
@@ -301,7 +310,7 @@ the English name as a fallback; translating all 5 option names into three
 scripts felt like real overreach for something this secondary.
 
 ### Verse-timing / read-along highlight
-**Esther note:** only adx/bod/khg have timing (eng/cmn are `null`); the paragraph below on locally-generated eng/cmn timing is Jonah history, kept for if Esther ever gets that audio.
+**Esther note:** all five tracks have timing; eng and cmn were generated locally (see "Esther-specific differences").
 
 `source-assets/timing/*.txt` files are parsed by `gen-chapters.mjs` into
 `chapter.timing.{adx,bod,khg,eng,cmn}`: an array of `{verse, time}`
@@ -1838,10 +1847,10 @@ the NTB Tibetan notes in the SFM).
   illustration placements (filename-based, only partly checkable against the
   PDF — see above), the 10 chapter-card cover picks, the provisional Nepali
   chapter titles, the English/Chinese About copy (carried over from Jonah's
-  provisional translations), and the Esther-specific audio set (adds English;
-  no Chinese).
-- Chinese audio doesn't exist — ask Brett/John whether to produce it
-  (Jonah/Ruth's is ElevenLabs), then follow "To add Chinese audio later" above.
+  provisional translations), and the Esther-specific audio set (adds English and
+  Wordproject's Chinese).
+- Chinese audio is Wordproject's (24kbps) rather than the ElevenLabs used for
+  Jonah/Ruth — John hasn't heard or approved it, and its license is unchecked.
 - #31 (justification) and the rest of requests #24-34 are in Esther because
   the base was Jonah; they are still pending John's review there. #26
   (timeline text size) waits on John's re-exported images — when they come,
