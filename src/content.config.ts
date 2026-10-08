@@ -9,6 +9,8 @@ const verseBlock = z.object({
   cmn: z.string(), // Chinese (CUV) — no poetry line breaks in this source, plain string like en
   hi: z.string(), // Hindi (2017) — text only, no audio track
   ne: z.string(), // Nepali (ULB) — text only, no audio track
+  // Footnotes for the {{fn:N}} markers in `bo` (request #35) — Tibetan only; absent when none.
+  notes: z.array(z.string()).optional(),
   paragraphStart: z.boolean(), // from the SFM's \p/\m markers — used by paragraph-layout mode
   // Per-language display label where it differs from `number` — a verse BRIDGE
   // like "11-12" (Esther 8:11-12; Chinese-only 1:13-14). See gen-chapters.mjs.
