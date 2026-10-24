@@ -25,7 +25,7 @@
     "bod": "4:50",
     "khg": "4:37",
     "eng": "4:03",
-    "cmn": "4:39"
+    "cmn": "3:57"
   },
   "timing": {
     "adx": [
@@ -407,95 +407,95 @@
     "cmn": [
       {
         "verse": 1,
-        "time": 6.46
+        "time": 0
       },
       {
         "verse": 2,
-        "time": 16.88
+        "time": 8.74
       },
       {
         "verse": 3,
-        "time": 23.28
+        "time": 15.54
       },
       {
         "verse": 4,
-        "time": 35.74
+        "time": 26.34
       },
       {
         "verse": 5,
-        "time": 46.76
+        "time": 35.42
       },
       {
         "verse": 6,
-        "time": 57.2
+        "time": 44.34
       },
       {
         "verse": 7,
-        "time": 67.98
+        "time": 54.46
       },
       {
         "verse": 8,
-        "time": 84.32
+        "time": 69.18
       },
       {
         "verse": 9,
-        "time": 96.34
+        "time": 80.14
       },
       {
         "verse": 10,
-        "time": 113.66
+        "time": 94.3
       },
       {
         "verse": 11,
-        "time": 121.78
+        "time": 101.98
       },
       {
         "verse": 12,
-        "time": 131.34
+        "time": 109.98
       },
       {
         "verse": 13,
-        "time": 147.34
+        "time": 123.54
       },
       {
         "verse": 14,
-        "time": 156.6
+        "time": 131.82
       },
       {
         "verse": 15,
-        "time": 171.06
+        "time": 143.66
       },
       {
         "verse": 16,
-        "time": 191.74
+        "time": 161.78
       },
       {
         "verse": 17,
-        "time": 200.2
+        "time": 169.14
       },
       {
         "verse": 18,
-        "time": 216.1
+        "time": 183.3
       },
       {
         "verse": 19,
-        "time": 228.4
+        "time": 194.033
       },
       {
         "verse": 20,
-        "time": 234.1
+        "time": 198.38
       },
       {
         "verse": 21,
-        "time": 247.1
+        "time": 209.54
       },
       {
         "verse": 22,
-        "time": 259.4
+        "time": 221.58
       },
       {
         "verse": 23,
-        "time": 267.92
+        "time": 229.18
       }
     ]
   },

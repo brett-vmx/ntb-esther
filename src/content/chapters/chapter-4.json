@@ -25,7 +25,7 @@
     "bod": "3:05",
     "khg": "2:58",
     "eng": "2:46",
-    "cmn": "3:06"
+    "cmn": "2:43"
   },
   "timing": {
     "adx": [
@@ -311,71 +311,71 @@
     "cmn": [
       {
         "verse": 1,
-        "time": 6.36
+        "time": 0
       },
       {
         "verse": 2,
-        "time": 17.22
+        "time": 9.7
       },
       {
         "verse": 3,
-        "time": 24.04
+        "time": 16.02
       },
       {
         "verse": 4,
-        "time": 35.46
+        "time": 27.42
       },
       {
         "verse": 5,
-        "time": 49.72
+        "time": 40.5
       },
       {
         "verse": 6,
-        "time": 62.68
+        "time": 52.14
       },
       {
         "verse": 7,
-        "time": 68.4
+        "time": 57.1
       },
       {
         "verse": 8,
-        "time": 78.3
+        "time": 65.78
       },
       {
         "verse": 9,
-        "time": 95.34
+        "time": 82.22
       },
       {
         "verse": 10,
-        "time": 100.46
+        "time": 86.54
       },
       {
         "verse": 11,
-        "time": 105.64
+        "time": 91.22
       },
       {
         "verse": 12,
-        "time": 126.4
+        "time": 111.22
       },
       {
         "verse": 13,
-        "time": 129.9
+        "time": 114.54
       },
       {
         "verse": 14,
-        "time": 139.54
+        "time": 122.9
       },
       {
         "verse": 15,
-        "time": 156.42
+        "time": 137.58
       },
       {
         "verse": 16,
-        "time": 160.92
+        "time": 141.38
       },
       {
         "verse": 17,
-        "time": 180
+        "time": 158.7
       }
     ]
   },

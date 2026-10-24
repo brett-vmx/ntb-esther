@@ -25,7 +25,7 @@
     "bod": "2:09",
     "khg": "2:02",
     "eng": "1:52",
-    "cmn": "2:18"
+    "cmn": "2:05"
   },
   "timing": {
     "adx": [
@@ -199,43 +199,43 @@
     "cmn": [
       {
         "verse": 1,
-        "time": 6.36
+        "time": 0
       },
       {
         "verse": 2,
-        "time": 11.24
+        "time": 4.34
       },
       {
         "verse": 3,
-        "time": 27.88
+        "time": 20.18
       },
       {
         "verse": 4,
-        "time": 44.7
+        "time": 36.82
       },
       {
         "verse": 5,
-        "time": 60.04
+        "time": 53.18
       },
       {
         "verse": 6,
-        "time": 69.96
+        "time": 62.18
       },
       {
         "verse": 7,
-        "time": 80.7
+        "time": 67.86
       },
       {
         "verse": 8,
-        "time": 93.54
+        "time": 80.82
       },
       {
         "verse": 9,
-        "time": 111.14
+        "time": 100.54
       },
       {
         "verse": 10,
-        "time": 128.74
+        "time": 117.26
       }
     ]
   },

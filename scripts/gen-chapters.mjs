@@ -191,16 +191,16 @@ const NEPALI_TITLES = {
 // cmn = Chinese (CUV), Wordproject's recording (wordproject.org/bibles/audio/
 // 04_chinese/b17.htm), copied as-is (22.05kHz mono 24kbps — not re-encoded).
 const DURATIONS = {
-  1: { adx: 418.8, bod: 257.2, khg: 251.6, eng: 217.2, cmn: 248.8 },
-  2: { adx: 471.7, bod: 289.7, khg: 277.0, eng: 243.0, cmn: 278.6 },
-  3: { adx: 295.0, bod: 186.9, khg: 185.4, eng: 165.7, cmn: 197.5 },
-  4: { adx: 288.7, bod: 184.7, khg: 177.5, eng: 165.7, cmn: 186.0 },
-  5: { adx: 239.9, bod: 156.3, khg: 152.1, eng: 143.8, cmn: 167.2 },
-  6: { adx: 259.3, bod: 171.5, khg: 164.4, eng: 142.2, cmn: 167.1 },
-  7: { adx: 200.3, bod: 129.4, khg: 122.3, eng: 112.4, cmn: 138.2 },
-  8: { adx: 362.7, bod: 231.5, khg: 222.9, eng: 196.8, cmn: 222.0 },
-  9: { adx: 510.4, bod: 330.8, khg: 328.3, eng: 297.4, cmn: 341.2 },
-  10: { adx: 57.7, bod: 40.1, khg: 37.3, eng: 33.8, cmn: 36.8 },
+  1: { adx: 418.8, bod: 257.2, khg: 251.6, eng: 217.2, cmn: 201.8 },
+  2: { adx: 471.7, bod: 289.7, khg: 277.0, eng: 243.0, cmn: 236.6 },
+  3: { adx: 295.0, bod: 186.9, khg: 185.4, eng: 165.7, cmn: 189.4 },
+  4: { adx: 288.7, bod: 184.7, khg: 177.5, eng: 165.7, cmn: 163.1 },
+  5: { adx: 239.9, bod: 156.3, khg: 152.1, eng: 143.8, cmn: 153.4 },
+  6: { adx: 259.3, bod: 171.5, khg: 164.4, eng: 142.2, cmn: 143.6 },
+  7: { adx: 200.3, bod: 129.4, khg: 122.3, eng: 112.4, cmn: 125.4 },
+  8: { adx: 362.7, bod: 231.5, khg: 222.9, eng: 196.8, cmn: 191.8 },
+  9: { adx: 510.4, bod: 330.8, khg: 328.3, eng: 297.4, cmn: 295 },
+  10: { adx: 57.7, bod: 40.1, khg: 37.3, eng: 33.8, cmn: 26.8 },
 };
 
 // Real bug, caught while adding Chinese chapter 1's duration (239.6s):
